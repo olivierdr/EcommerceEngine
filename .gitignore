@@ -62,3 +62,5 @@ low_coherence_categories.json
 #data
 data/
 Guidelines.pdf
+uncertain_products/
+comparison_report.json
