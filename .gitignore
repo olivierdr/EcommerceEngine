@@ -64,3 +64,5 @@ data/
 Guidelines.pdf
 uncertain_products/
 comparison_report.json
+uncertain_products_flat/
+category_names.json

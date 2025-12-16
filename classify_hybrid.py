@@ -2,74 +2,76 @@
 Classification Hybride
 Flat classification avec validation hiérarchique et gestion des produits incertains
 
-L'approche hybride améliore le modèle flat en :
-1. Identifiant les produits incertains pour validation humaine
-2. Utilisant la hiérarchie comme fallback pour produits à faible confiance
-3. Fournissant des métriques de confiance pour monitoring
+L'approche hybride réutilise le modèle flat entraîné et ajoute :
+1. Identification des produits incertains pour validation humaine
+2. Validation hiérarchique pour produits à faible confiance
+3. Métriques de confiance pour monitoring
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import LabelEncoder
 from sentence_transformers import SentenceTransformer
 import json
+import pickle
 import warnings
 warnings.filterwarnings('ignore')
 
 
 class HybridClassifier:
-    """Classifieur hybride : Flat + validation hiérarchique"""
+    """Classifieur hybride : Réutilise le modèle flat + validation hiérarchique"""
     
-    def __init__(self, embedding_model_name='paraphrase-multilingual-MiniLM-L12-v2', confidence_threshold=0.5):
-        """Initialise le modèle d'embeddings"""
-        print("🔄 Chargement du modèle d'embeddings...")
+    def __init__(self, model_path=None, confidence_threshold=0.5):
+        """Charge le modèle flat pré-entraîné"""
+        if model_path is None:
+            model_path = Path(__file__).parent / 'flat_model.pkl'
+        
+        print("🔄 Chargement du modèle flat pré-entraîné...")
+        with open(model_path, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        self.classifier = model_data['classifier']
+        self.label_encoder = model_data['label_encoder']
+        self.brand_encoder = model_data.get('brand_encoder')
+        self.color_encoder = model_data.get('color_encoder')
+        self.brand_onehot = model_data.get('brand_onehot')
+        self.color_onehot = model_data.get('color_onehot')
+        
+        # Charger le modèle d'embeddings
+        embedding_model_name = model_data.get('embedding_model_name', 'paraphrase-multilingual-MiniLM-L12-v2')
         self.embedding_model = SentenceTransformer(embedding_model_name)
-        self.classifier = None
-        self.label_encoder = None
+        
         self.cat_to_path = {}
-        self.confidence_threshold = confidence_threshold  # Seuil pour produits incertains
-        
-    def prepare_features(self, df):
-        """Prépare les features textuelles"""
-        texts = (df['title'].fillna('') + ' ' + df['description'].fillna('')).str.strip()
-        embeddings = self.embedding_model.encode(texts.tolist(), show_progress_bar=False)
-        return embeddings
+        self.confidence_threshold = confidence_threshold
+        print("   ✓ Modèle chargé")
     
-    def train(self, train_path):
-        """Entraîne le modèle flat (comme baseline)"""
-        print("\n" + "="*60)
-        print("🚀 ENTRAÎNEMENT - Classification Hybride")
-        print("="*60)
+    def prepare_features(self, df):
+        """Prépare les features : réutilise la même logique que flat"""
+        # Features textuelles
+        texts = (df['title'].fillna('') + ' ' + df['description'].fillna('')).str.strip()
+        text_embeddings = self.embedding_model.encode(texts.tolist(), show_progress_bar=False)
         
-        # Charger les données
-        print("\n📊 Chargement des données d'entraînement...")
+        # Features catégorielles (brand et color)
+        brands = df['brand'].fillna('unknown').astype(str)
+        colors = df['color'].fillna('unknown').astype(str)
+        
+        brands_known = brands.map(lambda x: x if x in self.brand_encoder.classes_ else 'unknown')
+        colors_known = colors.map(lambda x: x if x in self.color_encoder.classes_ else 'unknown')
+        brand_encoded = self.brand_encoder.transform(brands_known)
+        color_encoded = self.color_encoder.transform(colors_known)
+        
+        brand_onehot = self.brand_onehot.transform(brand_encoded.reshape(-1, 1))
+        color_onehot = self.color_onehot.transform(color_encoded.reshape(-1, 1))
+        
+        # Concaténer toutes les features
+        features = np.hstack([text_embeddings, brand_onehot, color_onehot])
+        return features
+    
+    def load_hierarchy(self, train_path):
+        """Charge la hiérarchie depuis les données d'entraînement"""
         df_train = pd.read_csv(train_path)
-        print(f"   ✓ {len(df_train):,} produits chargés")
-        
-        # Construire le mapping catégorie -> path
         self.cat_to_path = dict(zip(df_train['category_id'], df_train['category_path']))
-        
-        # Préparer les features
-        print("\n📝 Préparation des features...")
-        X_train = self.prepare_features(df_train)
-        y_train = df_train['category_id'].values
-        
-        # Encoder les labels
-        self.label_encoder = LabelEncoder()
-        y_train_encoded = self.label_encoder.fit_transform(y_train)
-        
-        print(f"\n📈 Statistiques:")
-        print(f"   Nombre de catégories: {len(self.label_encoder.classes_)}")
-        
-        # Entraîner le classifieur flat
-        print("\n🎯 Entraînement du classifieur flat...")
-        self.classifier = LogisticRegression(max_iter=1000, random_state=42, n_jobs=-1)
-        self.classifier.fit(X_train, y_train_encoded)
-        print("   ✓ Modèle entraîné")
-        
         return self
     
     def predict_with_confidence(self, df):
@@ -279,18 +281,26 @@ def main():
     base_path = Path(__file__).parent
     train_path = base_path / 'data' / 'trainset.csv'
     test_path = base_path / 'data' / 'testset.csv'
+    model_path = base_path / 'flat_model.pkl'
     
-    # Vérifier que les fichiers existent
-    if not train_path.exists():
-        print(f"❌ Fichier non trouvé: {train_path}")
+    # Vérifier que le modèle existe
+    if not model_path.exists():
+        print(f"❌ Modèle flat non trouvé: {model_path}")
+        print("   Veuillez d'abord exécuter: python3 classify_flat.py")
         return
+    
     if not test_path.exists():
         print(f"❌ Fichier non trouvé: {test_path}")
         return
     
-    # Créer et entraîner le classifieur hybride
-    classifier = HybridClassifier(confidence_threshold=0.5)
-    classifier.train(train_path)
+    # Charger le modèle flat pré-entraîné
+    print("\n" + "="*60)
+    print("🚀 CLASSIFICATION HYBRIDE")
+    print("="*60)
+    classifier = HybridClassifier(model_path=model_path, confidence_threshold=0.5)
+    
+    # Charger la hiérarchie
+    classifier.load_hierarchy(train_path)
     
     # Évaluer sur le test set
     results = classifier.evaluate(test_path)

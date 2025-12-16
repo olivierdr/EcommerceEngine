@@ -12,6 +12,7 @@ import numpy as np
 from collections import Counter, defaultdict
 from pathlib import Path
 import json
+import re
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -117,12 +118,62 @@ class TaxonomyAuditor:
         rare_categories = (category_counts < 5).sum()
         print(f"\n⚠️  Catégories rares (< 5 produits): {rare_categories:,} ({rare_categories/unique_leaf_categories*100:.1f}%)")
         
+        # Générer les noms de catégories
+        category_names = self.generate_category_names()
+        
         return {
             'depths': depths,
             'max_depth': max_depth,
             'unique_leaf_categories': unique_leaf_categories,
-            'category_counts': category_counts
+            'category_counts': category_counts,
+            'category_names': category_names
         }
+    
+    def generate_category_names(self):
+        """Génère des noms simples pour chaque catégorie basés sur les mots-clés fréquents"""
+        print("\n🏷️  Génération des noms de catégories...")
+        
+        # Stopwords simples (FR/DE/EN)
+        stopwords = {'le', 'la', 'les', 'de', 'du', 'des', 'et', 'ou', 'pour', 'avec', 'sans', 
+                    'der', 'die', 'das', 'und', 'oder', 'für', 'mit', 'ohne',
+                    'the', 'a', 'an', 'and', 'or', 'for', 'with', 'without',
+                    'à', 'd', 'l', 'un', 'une', 'en', 'sur', 'par', 'dans'}
+        
+        category_names = {}
+        
+        for cat_id in self.df['category_id'].unique():
+            cat_products = self.df[self.df['category_id'] == cat_id]
+            titles = cat_products['title'].fillna('').astype(str).tolist()
+            
+            # Extraire les mots (min 3 caractères, alphanumériques)
+            words = []
+            for title in titles:
+                title_words = re.findall(r'\b[a-zA-ZÀ-ÿ]{3,}\b', title.lower())
+                words.extend([w for w in title_words if w not in stopwords])
+            
+            # Top 2-3 mots les plus fréquents
+            if words:
+                word_counts = Counter(words)
+                top_words = [word for word, _ in word_counts.most_common(3)]
+                category_name = ' '.join(top_words).title()
+                category_names[cat_id] = category_name
+            else:
+                category_names[cat_id] = "Catégorie inconnue"
+        
+        # Sauvegarder
+        output_path = Path(__file__).parent / 'category_names.json'
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(category_names, f, indent=2, ensure_ascii=False)
+        
+        print(f"   ✓ {len(category_names)} noms générés")
+        print(f"   💾 Sauvegardés dans: {output_path}")
+        
+        # Afficher quelques exemples
+        print(f"\n   Exemples de noms générés:")
+        for i, (cat_id, name) in enumerate(list(category_names.items())[:5]):
+            print(f"   {cat_id}: {name}")
+        
+        return category_names
     
     def detect_inconsistencies(self):
         """Détecte les incohérences structurelles dans les category_path"""
@@ -206,85 +257,54 @@ class TaxonomyAuditor:
         
         return inconsistencies
     
-    def save_rare_categories(self, threshold=10, output_file='rare_categories.json'):
-        """
-        Sauvegarde les catégories rares dans un fichier JSON
+    def evaluate_semantic_coherence(self, threshold=0.4, min_products=10):
+        """Analyse sémantique simplifiée : évalue la cohérence et sauvegarde les catégories problématiques"""
+        print("\n" + "="*60)
+        print("3️⃣  ÉVALUATION DE LA COHÉRENCE SÉMANTIQUE")
+        print("="*60)
         
-        Parameters:
-        -----------
-        threshold : int
-            Seuil en dessous duquel une catégorie est considérée comme rare
-        output_file : str
-            Nom du fichier JSON de sortie
-        """
-        category_counts = self.df['category_id'].value_counts()
-        rare_categories = category_counts[category_counts < threshold]
-        
-        rare_data = []
-        for cat_id, count in rare_categories.items():
-            cat_products = self.df[self.df['category_id'] == cat_id]
-            category_path = cat_products.iloc[0]['category_path'] if len(cat_products) > 0 else ""
-            
-            rare_data.append({
-                'category_id': cat_id,
-                'category_path': category_path,
-                'n_products': int(count)
-            })
-        
-        # Trier par nombre de produits (croissant)
-        rare_data.sort(key=lambda x: x['n_products'])
-        
-        output_path = Path(__file__).parent / output_file
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump({
-                'threshold': threshold,
-                'total_rare_categories': len(rare_data),
-                'categories': rare_data
-            }, f, indent=2, ensure_ascii=False)
-        
-        print(f"\n💾 Catégories rares sauvegardées: {output_file}")
-        print(f"   Seuil: < {threshold} produits")
-        print(f"   {len(rare_data)} catégories trouvées")
-        
-        return rare_data
-    
-    def save_low_coherence_categories(self, semantic_results, threshold=0.4, output_file='low_coherence_categories.json'):
-        """
-        Sauvegarde les catégories à faible cohérence sémantique dans un fichier JSON
-        
-        Parameters:
-        -----------
-        semantic_results : pd.DataFrame
-            Résultats de l'analyse de cohérence sémantique
-        threshold : float
-            Seuil en dessous duquel une catégorie est considérée comme peu cohérente
-        output_file : str
-            Nom du fichier JSON de sortie
-        """
-        if semantic_results is None:
-            print("\n⚠️  Impossible de sauvegarder: analyse sémantique non disponible")
+        if not EMBEDDINGS_AVAILABLE:
+            print("\n⚠️  sentence-transformers non disponible.")
             return None
         
-        low_coherence = semantic_results[semantic_results['coherence_score'] < threshold].copy()
+        print("\n🔄 Chargement du modèle d'embeddings...")
+        self.embedding_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        
+        # Analyser toutes les catégories avec suffisamment de produits
+        category_counts = self.df['category_id'].value_counts()
+        valid_categories = category_counts[category_counts >= min_products].index
+        
+        print(f"\n🔍 Analyse de {len(valid_categories)} catégories...")
         
         low_coherence_data = []
-        for _, row in low_coherence.iterrows():
-            cat_id = row['category_id']
+        texts_combined = (self.df['title'].fillna('') + ' ' + self.df['description'].fillna('')).str.strip()
+        
+        for cat_id in valid_categories:
             cat_products = self.df[self.df['category_id'] == cat_id]
-            category_path = cat_products.iloc[0]['category_path'] if len(cat_products) > 0 else ""
+            if len(cat_products) > 100:
+                cat_products = cat_products.sample(n=100, random_state=42)
             
-            low_coherence_data.append({
-                'category_id': cat_id,
-                'category_path': category_path,
-                'n_products': int(row['n_products']),
-                'coherence_score': float(row['coherence_score']),
-                'avg_semantic_distance': float(row['avg_semantic_distance'])
-            })
+            texts = texts_combined[cat_products.index].tolist()
+            embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
+            
+            # Distance moyenne intra-classe
+            from sklearn.metrics.pairwise import cosine_distances
+            distances = cosine_distances(embeddings)
+            np.fill_diagonal(distances, np.nan)
+            avg_distance = np.nanmean(distances)
+            coherence_score = 1 - avg_distance
+            
+            if coherence_score < threshold:
+                low_coherence_data.append({
+                    'category_id': cat_id,
+                    'category_path': cat_products.iloc[0]['category_path'],
+                    'n_products': len(cat_products),
+                    'coherence_score': float(coherence_score)
+                })
         
-        # Trier par score de cohérence (croissant)
+        # Sauvegarder
         low_coherence_data.sort(key=lambda x: x['coherence_score'])
-        
-        output_path = Path(__file__).parent / output_file
+        output_path = Path(__file__).parent / 'low_coherence_categories.json'
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump({
                 'threshold': threshold,
@@ -292,105 +312,11 @@ class TaxonomyAuditor:
                 'categories': low_coherence_data
             }, f, indent=2, ensure_ascii=False)
         
-        print(f"\n💾 Catégories à faible cohérence sauvegardées: {output_file}")
-        print(f"   Seuil: < {threshold}")
-        print(f"   {len(low_coherence_data)} catégories trouvées")
+        print(f"\n💾 {len(low_coherence_data)} catégories à faible cohérence sauvegardées")
+        if low_coherence_data:
+            print(f"   Top 3: {', '.join([c['category_id'] for c in low_coherence_data[:3]])}")
         
         return low_coherence_data
-    
-    def evaluate_semantic_coherence(self, top_n_categories=20, min_products=10, analyze_all=False):
-        """
-        Évalue la cohérence sémantique des produits au sein de chaque catégorie
-        
-        Parameters:
-        -----------
-        top_n_categories : int
-            Nombre de catégories à analyser en détail (si analyze_all=False)
-        min_products : int
-            Nombre minimum de produits requis pour analyser une catégorie
-        analyze_all : bool
-            Si True, analyse toutes les catégories (peut être long)
-        """
-        print("\n" + "="*60)
-        print("3️⃣  ÉVALUATION DE LA COHÉRENCE SÉMANTIQUE")
-        print("="*60)
-        
-        if not EMBEDDINGS_AVAILABLE:
-            print("\n⚠️  sentence-transformers non disponible. Analyse sémantique limitée.")
-            print("   Installez avec: pip install sentence-transformers")
-            return None
-        
-        print("\n🔄 Chargement du modèle d'embeddings multilingue...")
-        try:
-            # Modèle multilingue pour FR/DE/EN
-            self.embedding_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-            print("   ✓ Modèle chargé")
-        except Exception as e:
-            print(f"   ❌ Erreur lors du chargement: {e}")
-            return None
-        
-        # Préparer les textes (title + description)
-        print("\n📝 Préparation des textes produits...")
-        self.df['text'] = (
-            self.df['title'].fillna('') + ' ' + 
-            self.df['description'].fillna('')
-        ).str.strip()
-        
-        # Filtrer les catégories avec suffisamment de produits
-        category_counts = self.df['category_id'].value_counts()
-        if analyze_all:
-            valid_categories = category_counts[category_counts >= min_products].index
-            print(f"\n🔍 Analyse de toutes les catégories (≥{min_products} produits)...")
-        else:
-            valid_categories = category_counts[category_counts >= min_products].index[:top_n_categories]
-            print(f"\n🔍 Analyse de {len(valid_categories)} catégories (≥{min_products} produits)...")
-        
-        results = []
-        
-        for cat_id in valid_categories:
-            cat_products = self.df[self.df['category_id'] == cat_id]
-            
-            # Échantillonner si trop de produits
-            if len(cat_products) > 100:
-                cat_products = cat_products.sample(n=100, random_state=42)
-            
-            texts = cat_products['text'].tolist()
-            
-            # Calculer les embeddings
-            embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
-            
-            # Calculer la cohérence (distance moyenne intra-classe)
-            # Plus la distance est faible, plus la catégorie est cohérente
-            from sklearn.metrics.pairwise import cosine_distances
-            distances = cosine_distances(embeddings)
-            # Distance moyenne (excluant la diagonale)
-            np.fill_diagonal(distances, np.nan)
-            avg_distance = np.nanmean(distances)
-            
-            results.append({
-                'category_id': cat_id,
-                'n_products': len(cat_products),
-                'avg_semantic_distance': avg_distance,
-                'coherence_score': 1 - avg_distance  # Plus proche de 1 = plus cohérent
-            })
-        
-        results_df = pd.DataFrame(results).sort_values('coherence_score')
-        
-        print(f"\n📊 Résultats de cohérence sémantique:")
-        print(f"   Score moyen: {results_df['coherence_score'].mean():.3f}")
-        print(f"   Score médian: {results_df['coherence_score'].median():.3f}")
-        print(f"   Score min: {results_df['coherence_score'].min():.3f}")
-        print(f"   Score max: {results_df['coherence_score'].max():.3f}")
-        
-        print(f"\n🏆 Top 5 catégories les plus cohérentes:")
-        for _, row in results_df.tail(5).iterrows():
-            print(f"   {row['category_id']}: {row['coherence_score']:.3f} ({row['n_products']} produits)")
-        
-        print(f"\n⚠️  Top 5 catégories les moins cohérentes (potentiellement bruitées):")
-        for _, row in results_df.head(5).iterrows():
-            print(f"   {row['category_id']}: {row['coherence_score']:.3f} ({row['n_products']} produits)")
-        
-        return results_df
     
     def generate_report(self):
         """Génère un rapport complet d'audit"""
@@ -404,15 +330,7 @@ class TaxonomyAuditor:
         # Analyses
         structure_info = self.analyze_structure()
         inconsistencies = self.detect_inconsistencies()
-        # Analyser toutes les catégories pour avoir des résultats complets
-        semantic_results = self.evaluate_semantic_coherence(analyze_all=True)
-        
-        # Sauvegarder les catégories rares (seuil: < 10 produits)
-        self.save_rare_categories(threshold=10)
-        
-        # Sauvegarder les catégories à faible cohérence (seuil: < 0.4)
-        if semantic_results is not None:
-            self.save_low_coherence_categories(semantic_results, threshold=0.4)
+        semantic_results = self.evaluate_semantic_coherence(threshold=0.4)
         
         # Résumé
         print("\n" + "="*60)
@@ -441,10 +359,8 @@ class TaxonomyAuditor:
         else:
             print(f"\n✅ Aucune incohérence structurelle majeure détectée")
         
-        if semantic_results is not None:
-            low_coherence = (semantic_results['coherence_score'] < 0.3).sum()
-            if low_coherence > 0:
-                print(f"   - {low_coherence} catégories avec faible cohérence sémantique (< 0.3)")
+        if semantic_results:
+            print(f"   - {len(semantic_results)} catégories avec faible cohérence sémantique (< 0.4)")
         
         print("\n" + "="*60)
         print("✓ Audit terminé")
