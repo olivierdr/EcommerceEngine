@@ -139,7 +139,7 @@ class TaxonomyAuditor:
                     'the', 'a', 'an', 'and', 'or', 'for', 'with', 'without',
                     'à', 'd', 'l', 'un', 'une', 'en', 'sur', 'par', 'dans'}
         
-        category_names = {}
+        category_data = {}
         
         for cat_id in self.df['category_id'].unique():
             cat_products = self.df[self.df['category_id'] == cat_id]
@@ -156,24 +156,32 @@ class TaxonomyAuditor:
                 word_counts = Counter(words)
                 top_words = [word for word, _ in word_counts.most_common(3)]
                 category_name = ' '.join(top_words).title()
-                category_names[cat_id] = category_name
             else:
-                category_names[cat_id] = "Catégorie inconnue"
+                category_name = "Catégorie inconnue"
+            
+            # Exemples de titres (max 5)
+            example_titles = [t[:80] for t in titles[:5] if t.strip()]
+            
+            category_data[cat_id] = {
+                'name': category_name,
+                'example_titles': example_titles
+            }
         
         # Sauvegarder
         output_path = Path(__file__).parent / 'category_names.json'
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(category_names, f, indent=2, ensure_ascii=False)
+            json.dump(category_data, f, indent=2, ensure_ascii=False)
         
-        print(f"   ✓ {len(category_names)} noms générés")
+        print(f"   ✓ {len(category_data)} noms générés avec exemples")
         print(f"   💾 Sauvegardés dans: {output_path}")
         
         # Afficher quelques exemples
         print(f"\n   Exemples de noms générés:")
-        for i, (cat_id, name) in enumerate(list(category_names.items())[:5]):
-            print(f"   {cat_id}: {name}")
+        for i, (cat_id, data) in enumerate(list(category_data.items())[:3]):
+            print(f"   {cat_id}: {data['name']}")
+            print(f"      Exemples: {data['example_titles'][0][:60]}...")
         
-        return category_names
+        return category_data
     
     def detect_inconsistencies(self):
         """Détecte les incohérences structurelles dans les category_path"""

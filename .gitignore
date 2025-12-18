@@ -66,3 +66,6 @@ uncertain_products/
 comparison_report.json
 uncertain_products_flat/
 category_names.json
+certain_categories_analysis.json
+confusion_patterns.json
+uncertain_categories_analysis.json
