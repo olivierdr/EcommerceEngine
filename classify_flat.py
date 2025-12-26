@@ -29,7 +29,6 @@ class FlatClassifier:
         self.df_train = None
         self.X_train = None  # Cache des embeddings d'entraînement
         self.cat_to_path = {}
-        self.problematic_categories = set()
         
     def prepare_features(self, df, show_progress=True, cache_path=None):
         """Prépare les features textuelles uniquement (title + description)"""
@@ -93,13 +92,6 @@ class FlatClassifier:
         
         # Construire cat_to_path pour la production
         self.cat_to_path = dict(zip(df_train['category_id'], df_train['category_path']))
-        
-        # Identifier les catégories problématiques (à partir des prédictions d'entraînement)
-        print("\n🔍 Identification des catégories problématiques...")
-        y_pred_train, conf_train = self.predict_with_confidence(df_train)
-        problematic_categories = self._identify_problematic_categories(df_train, y_pred_train, conf_train)
-        self.problematic_categories = problematic_categories
-        print(f"   ✓ {len(problematic_categories)} catégories problématiques identifiées")
         
         return self
     
@@ -207,7 +199,7 @@ class FlatClassifier:
             print(f"   ✅ Pas de sur-apprentissage significatif")
         
         # Analyses détaillées : catégories certaines, incertaines et patterns de confusion
-        self.generate_detailed_analyses(df_test, y_pred_test, conf_test, y_true_test, confidence_threshold)
+        self.analyze_categories(df_test, y_pred_test, conf_test, y_true_test, confidence_threshold)
         
         # Sauvegarder le modèle avec métadonnées pour la production
         model_path = Path(__file__).parent / 'flat_model.pkl'
@@ -216,8 +208,7 @@ class FlatClassifier:
                 'classifier': self.classifier,
                 'label_encoder': self.label_encoder,
                 'embedding_model_name': 'paraphrase-multilingual-MiniLM-L12-v2',
-                'cat_to_path': self.cat_to_path,
-                'problematic_categories': self.problematic_categories
+                'cat_to_path': self.cat_to_path
             }, f)
         print(f"\n💾 Modèle sauvegardé: {model_path}")
         
@@ -229,233 +220,148 @@ class FlatClassifier:
             'y_pred': y_pred_test
         }
     
-    def load_category_names(self):
-        """Charge les noms de catégories depuis category_names.json"""
+    def analyze_categories(self, df, predictions, confidence_scores, y_true, threshold=0.5):
+        """Analyse unifiée : génère les 3 JSON (certain, uncertain, confusion) en une seule passe"""
+        print("\n" + "="*60)
+        print("📊 ANALYSES DÉTAILLÉES")
+        print("="*60)
+        
+        # Charger les noms de catégories
         names_path = Path(__file__).parent / 'category_names.json'
+        category_names = {}
         if names_path.exists():
             with open(names_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Adapter au format actuel (dict avec 'name' et 'example_titles')
                 if isinstance(list(data.values())[0], dict):
-                    return {cat_id: data[cat_id]['name'] for cat_id in data}
+                    category_names = {cat_id: data[cat_id]['name'] for cat_id in data}
                 else:
-                    return data
-        return {}
-    
-    def generate_detailed_analyses(self, df, predictions, confidence_scores, y_true, threshold=0.5):
-        """Génère les analyses détaillées : catégories certaines, incertaines et patterns de confusion"""
-        print("\n" + "="*60)
-        print("📊 GÉNÉRATION DES ANALYSES DÉTAILLÉES")
-        print("="*60)
+                    category_names = data
         
-        category_names = self.load_category_names()
-        
-        # Créer un DataFrame avec toutes les infos
+        # Préparer les données
         df_analysis = df.copy()
         df_analysis['predicted_category'] = predictions
         df_analysis['confidence'] = confidence_scores
         df_analysis['is_certain'] = confidence_scores >= threshold
         df_analysis['is_correct'] = predictions == y_true
         
-        # 1. Analyse des catégories certaines
-        self.analyze_certain_categories(df_analysis, category_names, threshold)
-        
-        # 2. Analyse des catégories incertaines
-        self.analyze_uncertain_categories(df_analysis, category_names, threshold)
-        
-        # 3. Analyse des patterns de confusion
-        self.analyze_confusion_patterns(df_analysis, category_names)
-    
-    def analyze_certain_categories(self, df, category_names, threshold):
-        """Analyse des catégories avec produits certains (confiance >= threshold)"""
-        print("\n📈 Analyse des catégories certaines...")
-        
-        certain_df = df[df['is_certain']]
-        
-        if len(certain_df) == 0:
-            print("   Aucun produit certain")
-            return
-        
-        # Grouper par catégorie vraie
-        cat_stats = []
-        for cat_id in certain_df['category_id'].unique():
-            cat_data = certain_df[certain_df['category_id'] == cat_id]
-            cat_name = category_names.get(cat_id, 'N/A')
-            
-            # Calculer les métriques
-            confidences = cat_data['confidence'].values
-            titles = cat_data['title'].fillna('').astype(str)
-            
-            # Construire le mapping catégorie -> path
-            cat_to_path = dict(zip(df['category_id'], df['category_path']))
-            
-            # Exemples avec infos complètes
-            example_titles = []
-            for idx in cat_data.head(5).index:
-                row = cat_data.loc[idx]
-                example_titles.append({
-                    'title': str(row['title'])[:80] if pd.notna(row['title']) else '',
-                    'confidence': round(float(row['confidence']), 3),
-                    'true_category': cat_id,
-                    'true_path': row['category_path'],
-                    'predicted_category': row['predicted_category'],
-                    'predicted_path': cat_to_path.get(row['predicted_category'], 'N/A')
-                })
-            
-            cat_stats.append({
-                'category_id': cat_id,
-                'category_name': cat_name,
-                'n_certain_products': len(cat_data),
-                'avg_confidence': round(float(np.mean(confidences)), 3),
-                'certainty_rate': round(len(cat_data) / len(df[df['category_id'] == cat_id]), 3),
-                'avg_title_length': round(float(np.mean([len(t) for t in titles])), 3),
-                'brand_presence_rate': round(float(cat_data['brand'].notna().sum() / len(cat_data)), 3),
-                'color_presence_rate': round(float(cat_data['color'].notna().sum() / len(cat_data)), 3),
-                'example_titles': example_titles
-            })
-        
-        # Trier par nombre de produits certains (desc)
-        cat_stats.sort(key=lambda x: x['n_certain_products'], reverse=True)
-        
-        # Top 10
-        top_10 = cat_stats[:10]
-        
-        summary = {
-            'total_certain_products': len(certain_df),
-            'total_categories_with_certain': len(cat_stats),
-            'avg_confidence': round(float(np.mean(certain_df['confidence'])), 3),
-            'threshold': threshold
-        }
-        
-        output = {
-            'summary': summary,
-            'top_10_categories': top_10
-        }
-        
-        output_path = Path(__file__).parent / 'certain_categories_analysis.json'
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-        
-        print(f"   ✓ {len(cat_stats)} catégories avec produits certains")
-        print(f"   ✓ Top 10 sauvegardés dans: {output_path}")
-    
-    def analyze_uncertain_categories(self, df, category_names, threshold):
-        """Analyse des catégories avec produits incertains (confiance < threshold)"""
-        print("\n📉 Analyse des catégories incertaines...")
-        
-        uncertain_df = df[df['confidence'] < threshold]
-        
-        if len(uncertain_df) == 0:
-            print("   Aucun produit incertain")
-            return
-        
-        # Construire le mapping catégorie -> path
         cat_to_path = dict(zip(df['category_id'], df['category_path']))
         
-        # Grouper par catégorie vraie
-        cat_stats = []
-        for cat_id in uncertain_df['category_id'].unique():
-            cat_data = uncertain_df[uncertain_df['category_id'] == cat_id]
-            cat_name = category_names.get(cat_id, 'N/A')
-            
-            # Total de produits dans cette catégorie
-            total_in_cat = len(df[df['category_id'] == cat_id])
-            
-            # Calculer les métriques
-            confidences = cat_data['confidence'].values
-            titles = cat_data['title'].fillna('').astype(str)
-            
-            # Exemples avec infos complètes
-            example_titles = []
-            for idx in cat_data.head(5).index:
-                row = cat_data.loc[idx]
-                example_titles.append({
-                    'title': str(row['title'])[:80] if pd.notna(row['title']) else '',
-                    'confidence': round(float(row['confidence']), 3),
-                    'true_category': cat_id,
-                    'true_path': row['category_path'],
-                    'predicted_category': row['predicted_category'],
-                    'predicted_path': cat_to_path.get(row['predicted_category'], 'N/A')
-                })
-            
-            cat_stats.append({
-                'category_id': cat_id,
-                'category_name': cat_name,
-                'n_uncertain_products': len(cat_data),
-                'uncertainty_rate': round(len(cat_data) / total_in_cat, 3),
-                'avg_confidence': round(float(np.mean(confidences)), 3),
-                'avg_title_length': round(float(np.mean([len(t) for t in titles])), 3),
-                'brand_presence_rate': round(float(cat_data['brand'].notna().sum() / len(cat_data)), 3),
-                'color_presence_rate': round(float(cat_data['color'].notna().sum() / len(cat_data)), 3),
-                'example_titles': example_titles
-            })
-        
-        # Trier par nombre de produits incertains (desc)
-        cat_stats.sort(key=lambda x: x['n_uncertain_products'], reverse=True)
-        
-        # Top 10
-        top_10 = cat_stats[:10]
-        
-        summary = {
-            'total_uncertain_products': len(uncertain_df),
-            'total_categories_with_uncertain': len(cat_stats),
-            'avg_confidence': round(float(np.mean(uncertain_df['confidence'])), 3),
-            'threshold': threshold
-        }
-        
-        output = {
-            'summary': summary,
-            'top_10_categories': top_10
-        }
-        
-        output_path = Path(__file__).parent / 'uncertain_categories_analysis.json'
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-        
-        print(f"   ✓ {len(cat_stats)} catégories avec produits incertains")
-        print(f"   ✓ Top 10 sauvegardés dans: {output_path}")
-    
-    def analyze_confusion_patterns(self, df, category_names):
-        """Analyse des patterns de confusion (catégories confondues)"""
-        print("\n🔄 Analyse des patterns de confusion...")
-        
-        # Filtrer les erreurs uniquement
-        errors = df[df['predicted_category'] != df['category_id']]
-        
-        if len(errors) == 0:
-            print("   Aucune erreur détectée")
-            return
-        
-        # Compter les paires de confusion
+        # Initialiser les structures
+        certain_stats = []
+        uncertain_stats = []
         confusion_pairs = {}
-        for _, row in errors.iterrows():
-            true_cat = row['category_id']
-            pred_cat = row['predicted_category']
-            pair_key = (true_cat, pred_cat)
-            
-            if pair_key not in confusion_pairs:
-                confusion_pairs[pair_key] = {
-                    'confidences': [],
-                    'examples': []
-                }
-            
-            confusion_pairs[pair_key]['confidences'].append(row['confidence'])
-            # Garder max 3 exemples par paire
-            if len(confusion_pairs[pair_key]['examples']) < 3:
-                confusion_pairs[pair_key]['examples'].append({
-                    'product_id': row['product_id'],
-                    'title': str(row['title'])[:100] if pd.notna(row['title']) else ''
-                })
         
-        # Calculer les statistiques pour chaque paire
+        # Parcourir les données une seule fois
+        for cat_id in df['category_id'].unique():
+            cat_data = df_analysis[df_analysis['category_id'] == cat_id]
+            cat_name = category_names.get(cat_id, 'N/A')
+            total_in_cat = len(cat_data)
+            
+            # Certain et Uncertain
+            certain_data = cat_data[cat_data['is_certain']]
+            uncertain_data = cat_data[~cat_data['is_certain']]
+            
+            if len(certain_data) > 0:
+                confidences = certain_data['confidence'].values
+                example_titles = []
+                for idx in certain_data.head(3).index:
+                    row = certain_data.loc[idx]
+                    example_titles.append({
+                        'title': str(row['title'])[:80] if pd.notna(row['title']) else '',
+                        'confidence': round(float(row['confidence']), 3),
+                        'true_category': cat_id,
+                        'true_path': row['category_path'],
+                        'predicted_category': row['predicted_category'],
+                        'predicted_path': cat_to_path.get(row['predicted_category'], 'N/A')
+                    })
+                
+                certain_stats.append({
+                    'category_id': cat_id,
+                    'category_name': cat_name,
+                    'n_certain_products': len(certain_data),
+                    'avg_confidence': round(float(np.mean(confidences)), 3),
+                    'certainty_rate': round(len(certain_data) / total_in_cat, 3),
+                    'example_titles': example_titles
+                })
+            
+            if len(uncertain_data) > 0:
+                confidences = uncertain_data['confidence'].values
+                example_titles = []
+                for idx in uncertain_data.head(3).index:
+                    row = uncertain_data.loc[idx]
+                    example_titles.append({
+                        'title': str(row['title'])[:80] if pd.notna(row['title']) else '',
+                        'confidence': round(float(row['confidence']), 3),
+                        'true_category': cat_id,
+                        'true_path': row['category_path'],
+                        'predicted_category': row['predicted_category'],
+                        'predicted_path': cat_to_path.get(row['predicted_category'], 'N/A')
+                    })
+                
+                uncertain_stats.append({
+                    'category_id': cat_id,
+                    'category_name': cat_name,
+                    'n_uncertain_products': len(uncertain_data),
+                    'uncertainty_rate': round(len(uncertain_data) / total_in_cat, 3),
+                    'avg_confidence': round(float(np.mean(confidences)), 3),
+                    'example_titles': example_titles
+                })
+            
+            # Confusion patterns (erreurs uniquement)
+            errors = cat_data[cat_data['predicted_category'] != cat_id]
+            for _, row in errors.iterrows():
+                pred_cat = row['predicted_category']
+                pair_key = (cat_id, pred_cat)
+                
+                if pair_key not in confusion_pairs:
+                    confusion_pairs[pair_key] = {
+                        'confidences': [],
+                        'examples': []
+                    }
+                
+                confusion_pairs[pair_key]['confidences'].append(row['confidence'])
+                if len(confusion_pairs[pair_key]['examples']) < 3:
+                    confusion_pairs[pair_key]['examples'].append({
+                        'product_id': row['product_id'],
+                        'title': str(row['title'])[:100] if pd.notna(row['title']) else ''
+                    })
+        
+        # Trier et sauvegarder Certain
+        certain_stats.sort(key=lambda x: x['n_certain_products'], reverse=True)
+        certain_df = df_analysis[df_analysis['is_certain']]
+        with open(Path(__file__).parent / 'certain_categories_analysis.json', 'w', encoding='utf-8') as f:
+            json.dump({
+                'summary': {
+                    'total_certain_products': len(certain_df),
+                    'total_categories_with_certain': len(certain_stats),
+                    'avg_confidence': round(float(np.mean(certain_df['confidence'])), 3),
+                    'threshold': threshold
+                },
+                'top_10_categories': certain_stats[:10]
+            }, f, indent=2, ensure_ascii=False)
+        
+        # Trier et sauvegarder Uncertain
+        uncertain_stats.sort(key=lambda x: x['n_uncertain_products'], reverse=True)
+        uncertain_df = df_analysis[~df_analysis['is_certain']]
+        with open(Path(__file__).parent / 'uncertain_categories_analysis.json', 'w', encoding='utf-8') as f:
+            json.dump({
+                'summary': {
+                    'total_uncertain_products': len(uncertain_df),
+                    'total_categories_with_uncertain': len(uncertain_stats),
+                    'avg_confidence': round(float(np.mean(uncertain_df['confidence'])), 3),
+                    'threshold': threshold
+                },
+                'top_10_categories': uncertain_stats[:10]
+            }, f, indent=2, ensure_ascii=False)
+        
+        # Calculer et sauvegarder Confusion Patterns
         patterns = []
+        errors_all = df_analysis[df_analysis['predicted_category'] != df_analysis['category_id']]
         for (true_cat, pred_cat), data in confusion_pairs.items():
             true_name = category_names.get(true_cat, 'N/A')
             pred_name = category_names.get(pred_cat, 'N/A')
-            
-            # Taux de confusion : erreurs / total produits de la catégorie vraie
-            total_true_cat = len(df[df['category_id'] == true_cat])
-            confusion_rate = len(data['confidences']) / total_true_cat
+            total_true_cat = len(df_analysis[df_analysis['category_id'] == true_cat])
+            confusion_rate = len(data['confidences']) / total_true_cat if total_true_cat > 0 else 0
             
             patterns.append({
                 'true_category_id': true_cat,
@@ -468,44 +374,19 @@ class FlatClassifier:
                 'examples': data['examples']
             })
         
-        # Trier par nombre de cas (desc)
         patterns.sort(key=lambda x: x['n_cases'], reverse=True)
+        with open(Path(__file__).parent / 'confusion_patterns.json', 'w', encoding='utf-8') as f:
+            json.dump({
+                'summary': {
+                    'total_confusion_cases': len(errors_all),
+                    'unique_confusion_pairs': len(patterns)
+                },
+                'top_10_confusion_patterns': patterns[:10]
+            }, f, indent=2, ensure_ascii=False)
         
-        # Top 10
-        top_10 = patterns[:10]
-        
-        summary = {
-            'total_confusion_cases': len(errors),
-            'unique_confusion_pairs': len(patterns)
-        }
-        
-        output = {
-            'summary': summary,
-            'top_10_confusion_patterns': top_10
-        }
-        
-        output_path = Path(__file__).parent / 'confusion_patterns.json'
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-        
+        print(f"   ✓ {len(certain_stats)} catégories certaines, {len(uncertain_stats)} incertaines")
         print(f"   ✓ {len(patterns)} patterns de confusion identifiés")
-        print(f"   ✓ Top 10 sauvegardés dans: {output_path}")
-    
-    def _identify_problematic_categories(self, df, predictions, confidence_scores, threshold=0.5, min_uncertainty_rate=0.4):
-        """Identifie les catégories problématiques basées sur le taux d'incertitude"""
-        problematic = set()
-        uncertain_df = df[confidence_scores < threshold].copy()
-        uncertain_df['predicted_category'] = predictions[confidence_scores < threshold]
-        
-        for cat_id in uncertain_df['category_id'].unique():
-            cat_uncertain = uncertain_df[uncertain_df['category_id'] == cat_id]
-            total_in_cat = len(df[df['category_id'] == cat_id])
-            uncertainty_rate = len(cat_uncertain) / total_in_cat if total_in_cat > 0 else 0
-            
-            if uncertainty_rate >= min_uncertainty_rate:
-                problematic.add(cat_id)
-        
-        return problematic
+        print(f"   ✓ 3 fichiers JSON générés")
 
 
 def main():

@@ -33,13 +33,10 @@ class HybridClassifier:
         
         # Charger les métadonnées depuis le modèle (production-ready)
         self.cat_to_path = model_data.get('cat_to_path', {})
-        self.problematic_categories = set(model_data.get('problematic_categories', []))
         self.confidence_threshold = confidence_threshold
         
         if not self.cat_to_path:
             print("   ⚠️  cat_to_path non trouvé dans le modèle")
-        if not self.problematic_categories:
-            print("   ⚠️  problematic_categories non trouvé dans le modèle")
     
     def load_hierarchy(self, train_path=None):
         """Charge la hiérarchie depuis le modèle (déjà chargé) ou depuis train_path (fallback)"""
@@ -86,10 +83,6 @@ class HybridClassifier:
         """Validation hiérarchique : choisir parmi top-K cohérents plutôt que remonter"""
         if confidence >= self.confidence_threshold:
             return pred_cat, "high_confidence"
-        
-        # Désactiver le fallback pour catégories problématiques
-        if pred_cat in self.problematic_categories:
-            return pred_cat, "low_confidence_no_fallback"
         
         # Vérifier cohérence hiérarchique parmi top-K
         top_k_indices = np.argsort(y_pred_proba_row)[-top_k:][::-1]
@@ -215,12 +208,10 @@ class HybridClassifier:
         high_conf = (validation_flags == 'high_confidence').sum()
         low_conf = (validation_flags == 'low_confidence').sum()
         coherent = (validation_flags == 'low_confidence_coherent_choice').sum()
-        no_fallback = (validation_flags == 'low_confidence_no_fallback').sum()
         
         print(f"\n📈 Répartition des prédictions:")
         print(f"   Haute confiance: {high_conf} ({high_conf/len(y_pred)*100:.1f}%)")
         print(f"   Choix cohérent: {coherent} ({coherent/len(y_pred)*100:.1f}%)")
-        print(f"   Pas de fallback (problématique): {no_fallback} ({no_fallback/len(y_pred)*100:.1f}%)")
         print(f"   Faible confiance: {low_conf} ({low_conf/len(y_pred)*100:.1f}%)")
         
         self.identify_uncertain_products(df_test, y_pred, confidence_scores, validation_flags)
