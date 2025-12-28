@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Classification automatique de produits e-commerce dans des catégories feuilles à partir des informations disponibles (title, description, brand, color). Le projet explore une approche de classification flat (baseline) avec identification des produits incertains pour validation humaine.
+Classification automatique de produits e-commerce dans des catégories feuilles à partir des informations disponibles (title, description, brand, color). Le projet commence par un audit complet de la taxonomie existante pour comprendre sa structure et identifier d'éventuelles incohérences, puis explore une approche de classification flat (baseline) avec identification des produits incertains pour validation humaine.
 
 **Pour une compréhension approfondie des choix stratégiques, résultats détaillés et analyses, consultez le fichier [SYNTHESE.md](SYNTHESE.md).**
 
@@ -96,21 +96,6 @@ python3 src/classify_flat.py
 - `uncertain_categories_analysis.json` : Top 10 catégories problématiques
 - `confusion_patterns.json` : Top 10 patterns de confusion entre catégories
 
-## Résultats Principaux
-
-### Performance Globale
-
-- **Accuracy** : 77.47% sur le test set (1,721 erreurs sur 7,631 produits)
-- **Sur-apprentissage modéré** : Écart de 7.72 points entre train (85.19%) et test (77.47%)
-- **Distribution de confiance** : 75.5% produits certains, 24.5% produits incertains
-
-### Insights Clés
-
-1. **Performance solide** : 77.47% d'accuracy avec un modèle simple (Logistic Regression)
-2. **Identification efficace** : 1,873 produits incertains identifiés (24.5% du test set) pour validation humaine
-3. **Catégories problématiques** : Top 3 catégories avec le plus d'incertitude (ex: "Haut Parleur Noir" avec 62.1% d'incertitude)
-4. **Patterns de confusion** : Identification des paires de catégories régulièrement confondues (ex: "Machine Laver Linge" vs "Linge Lave Laver")
-
 ## Technologies Utilisées
 
 - **Python 3**
@@ -122,3 +107,4 @@ python3 src/classify_flat.py
 ## Documentation Complémentaire
 
 Pour une analyse détaillée des choix stratégiques, des résultats complets, des exemples d'erreurs et des axes d'amélioration, consultez le fichier **[SYNTHESE.md](SYNTHESE.md)**.
+

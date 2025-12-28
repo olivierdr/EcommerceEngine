@@ -352,7 +352,49 @@ class TaxonomyAuditor:
         
         return low_coherence_data, high_coherence_data
     
-    def generate_report(self):
+    def check_train_test_distribution(self, test_path):
+        """Vérifie la cohérence des distributions train/test"""
+        print("\n" + "="*60)
+        print("4 VÉRIFICATION DISTRIBUTION TRAIN/TEST")
+        print("="*60)
+        
+        df_test = pd.read_csv(test_path)
+        
+        # Calculer les proportions par catégorie
+        train_props = self.df['category_id'].value_counts(normalize=True).sort_index()
+        test_props = df_test['category_id'].value_counts(normalize=True).sort_index()
+        
+        # Vérifier les catégories manquantes
+        missing_in_test = set(train_props.index) - set(test_props.index)
+        missing_in_train = set(test_props.index) - set(train_props.index)
+        
+        if missing_in_train:
+            print(f"\n⚠️  {len(missing_in_train)} catégories du test absentes du train")
+        
+        # Aligner les index pour la corrélation
+        common_cats = sorted(set(train_props.index) & set(test_props.index))
+        train_aligned = train_props[common_cats]
+        test_aligned = test_props[common_cats]
+        
+        # Corrélation et différence moyenne
+        correlation = np.corrcoef(train_aligned, test_aligned)[0, 1]
+        avg_diff = np.mean(np.abs(train_aligned - test_aligned)) * 100
+        
+        print(f"\nDistribution Train vs Test:")
+        print(f"   ✓ Corrélation: {correlation:.3f}")
+        print(f"   ✓ Différence moyenne: {avg_diff:.2f} points")
+        
+        # Catégories avec écart > 2 points
+        diffs = (train_aligned - test_aligned).abs() * 100
+        large_diffs = diffs[diffs > 2]
+        if len(large_diffs) > 0:
+            print(f"   ⚠️  {len(large_diffs)} catégories avec écart > 2 points:")
+            for cat_id, diff in large_diffs.head(5).items():
+                print(f"      - {cat_id}: train {train_aligned[cat_id]*100:.1f}% vs test {test_aligned[cat_id]*100:.1f}% (diff: {diff:.1f})")
+        else:
+            print(f"   ✓ Toutes les catégories ont une distribution similaire")
+    
+    def generate_report(self, test_path=None):
         """Génère un rapport complet d'audit"""
         print("\n" + "="*60)
         print("RAPPORT D'AUDIT COMPLET")
@@ -366,6 +408,14 @@ class TaxonomyAuditor:
         self.detect_inconsistencies()
         self.evaluate_semantic_coherence(threshold=0.4)
         
+        # Vérification train/test si test_path fourni
+        if test_path:
+            test_full_path = Path(__file__).parent.parent / test_path if not Path(test_path).is_absolute() else Path(test_path)
+            if test_full_path.exists():
+                self.check_train_test_distribution(test_full_path)
+            else:
+                print(f"\n⚠️  Fichier test non trouvé: {test_full_path}")
+        
         print("\n" + "="*60)
         print("✓ Audit terminé")
         print("="*60)
@@ -373,14 +423,16 @@ class TaxonomyAuditor:
 
 def main():
     """Point d'entrée principal"""
-    data_path = Path(__file__).parent.parent / 'data' / 'trainset.csv'
+    base_path = Path(__file__).parent.parent
+    train_path = base_path / 'data' / 'trainset.csv'
+    test_path = base_path / 'data' / 'testset.csv'
     
-    if not data_path.exists():
-        print(f"Fichier non trouvé: {data_path}")
+    if not train_path.exists():
+        print(f"Fichier non trouvé: {train_path}")
         return
     
-    auditor = TaxonomyAuditor(data_path)
-    auditor.generate_report()
+    auditor = TaxonomyAuditor(train_path)
+    auditor.generate_report(test_path='data/testset.csv' if test_path.exists() else None)
 
 
 if __name__ == '__main__':
