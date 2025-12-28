@@ -77,38 +77,36 @@ Une approche "flat" est implémentée comme baseline : prédiction directe de la
    - Produit : "Street Fighter Ex 3"
    - **Analyse** : Confusion entre catégories de jeux vidéo différentes plateformes, probablement due à des titres de jeux similaires
 
-## Limites de l'approche
+## Axes d'amélioration
 
-### Limites techniques
+### Améliorations techniques
 
-1. **Modèle simple** : Logistic Regression linéaire, incapable de capturer des interactions complexes entre features. Un modèle plus sophistiqué (BERT fine-tuné, Transformers) pourrait améliorer les performances.
+1. **Modèles plus sophistiqués** : Passer de Logistic Regression à des modèles plus puissants (BERT fine-tuné, Transformers) pour capturer des interactions complexes entre features et améliorer les performances.
 
-2. **Features limitées** : 
-   - Seulement title + description exploités
-   - Brand et color non utilisés (pour éviter explosion dimensionnelle avec one-hot encoding)
-   - Pas d'exploitation de la structure hiérarchique dans les embeddings
+2. **Enrichissement des features** : 
+   - Intégrer brand et color de manière efficace (fréquence, embeddings plutôt que one-hot encoding)
+   - Exploiter la structure hiérarchique dans les embeddings (position dans l'arbre, chemin complet)
+   - Réduire le sur-apprentissage modéré (écart de 7.72 points entre train et test)
 
-3. **Sur-apprentissage modéré** : Écart de 7.72 points entre train et test, suggérant que le modèle mémorise partiellement les patterns d'entraînement.
+3. **Seuil de confiance adaptatif** : Remplacer le seuil fixe à 0.5 par un seuil adaptatif selon la catégorie, avec des seuils plus stricts pour les catégories problématiques.
 
-4. **Seuil de confiance fixe** : Le seuil à 0.5 est arbitraire et non adaptatif selon la catégorie. Certaines catégories nécessiteraient un seuil plus strict.
+### Améliorations méthodologiques
 
-### Limites méthodologiques
+1. **Exploitation de la hiérarchie** : Implémenter une approche top-down ou hybride pour réduire l'espace de décision et améliorer la cohérence métier, tout en conservant la simplicité de l'approche flat.
 
-1. **Pas d'exploitation de la hiérarchie** : L'approche flat ignore la structure hiérarchique, alors qu'une approche top-down pourrait réduire l'espace de décision et améliorer la cohérence métier.
+2. **Intégration des corrections humaines** : Mettre en place un mécanisme de réentraînement automatique avec les produits corrigés manuellement, en privilégiant les catégories problématiques.
 
-2. **Pas de réentraînement** : Les corrections humaines sur les produits incertains ne sont pas intégrées automatiquement pour améliorer le modèle.
+3. **Traitement spécifique des catégories problématiques** : Appliquer des règles métier ou une validation obligatoire pour les 32 catégories à faible cohérence sémantique identifiées dans l'audit.
 
-3. **Catégories problématiques non traitées** : Les 32 catégories à faible cohérence sémantique identifiées dans l'audit ne bénéficient pas d'un traitement spécifique (ex: règles métier, validation obligatoire).
+4. **Fallback hiérarchique** : En cas de faible confiance, proposer une catégorie parente comme alternative pour améliorer l'expérience utilisateur.
 
-4. **Pas de fallback hiérarchique** : En cas de faible confiance, le modèle ne propose pas de catégorie parente comme alternative, ce qui pourrait améliorer l'expérience utilisateur.
+### Améliorations opérationnelles
 
-### Limites opérationnelles
+1. **Détection de nouvelles catégories** : Développer un mécanisme pour identifier automatiquement des produits non classables dans les catégories existantes et déclencher un réentraînement ou une création de catégorie.
 
-1. **Pas de détection de nouvelles catégories** : Le modèle ne peut prédire que parmi les 100 catégories vues à l'entraînement. Un nouveau type de produit nécessiterait un réentraînement.
+2. **Monitoring en temps réel** : Mettre en place des mécanismes pour détecter une dérive de performance ou des changements dans la distribution des produits (alertes automatiques, dashboards).
 
-2. **Pas de monitoring en temps réel** : Aucun mécanisme pour détecter une dérive de performance ou des changements dans la distribution des produits.
-
-3. **Validation humaine non intégrée** : Bien que les produits incertains soient identifiés, il n'y a pas de workflow automatisé pour intégrer les corrections humaines.
+3. **Workflow de validation humaine** : Automatiser l'intégration des corrections humaines dans un pipeline d'amélioration continue, avec apprentissage actif pour prioriser les produits à valider.
 
 ## Mise en perspective avec les pratiques e-commerce
 
@@ -118,28 +116,8 @@ Les grandes plateformes e-commerce combinent généralement plusieurs approches 
 - des règles métier et des mécanismes de fallback vers des catégories parentes,
 - et, pour les cas ambigus, une intervention humaine via des interfaces de validation.
 
-**Approche hybride envisagée (non implémentée) :**
-
-Une approche hybride pourrait combiner la classification flat avec une validation hiérarchique : pour les produits à faible confiance, vérifier si les top-K prédictions partagent un parent commun et choisir parmi celles-ci. Cette stratégie permettrait d'exploiter la structure hiérarchique sans la complexité d'un modèle top-down complet. Cependant, pour un test technique, l'approche flat reste suffisante et démontre les concepts clés.
-
-## Perspectives et questions ouvertes
-
-Une fois une taxonomie jugée satisfaisante, plusieurs questions structurantes demeurent :
-
-- **Intégration de nouveaux produits** : Comment intégrer automatiquement un nouveau produit dans la taxonomie, et à partir de quel seuil de confiance déclencher une validation humaine ?
-
-- **Création de catégories** : Comment décider de la création ou du découpage de catégories (logique métier vs détection algorithmique) ? Dans quelle mesure la création de nouvelles catégories doit rester manuelle ou peut être partiellement automatisée ?
-
-- **Amélioration continue** : Comment intégrer les corrections humaines pour améliorer progressivement le modèle ? Faut-il réentraîner périodiquement ou mettre en place un apprentissage actif ?
-
-- **Monitoring et qualité** : Comment surveiller la qualité du classement en production ? Quels métriques suivre (accuracy globale, par catégorie, taux de validation humaine) ?
-
-Ces éléments conditionnent la robustesse, la scalabilité et la maintenabilité du système de classification à long terme.
-
 ## Résumé et perspectives
 
 L'approche retenue combine un **audit préalable** de la taxonomie et une **classification flat simple mais efficace** (77.47% d'accuracy), permettant d'identifier automatiquement les produits incertains pour validation humaine.
 
-Les principales **limites** résident dans la simplicité du modèle (Logistic Regression), l'absence d'exploitation de la hiérarchie et des features enrichies (brand/color), ainsi que le manque de mécanismes de réentraînement et de monitoring.
-
-Les **améliorations prioritaires** incluent l'exploitation efficace de brand/color, l'ajout d'un fallback hiérarchique pour les cas incertains, et à plus long terme, l'intégration de modèles plus sophistiqués (BERT fine-tuné) et d'un système de feedback pour amélioration continue.
+Les principaux **axes d'amélioration** identifiés concernent l'enrichissement du modèle (passage à BERT fine-tuné), l'exploitation efficace de brand/color et de la hiérarchie, ainsi que la mise en place de mécanismes de réentraînement et de monitoring pour une amélioration continue.
