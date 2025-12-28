@@ -1,10 +1,12 @@
 # Classification E-commerce - Test Technique
 
-## 📋 Objectif
+## Objectif
 
-Classification automatique de produits e-commerce dans des catégories feuilles à partir des informations disponibles (title, description, brand, color). Le projet explore deux approches de classification et compare leurs performances.
+Classification automatique de produits e-commerce dans des catégories feuilles à partir des informations disponibles (title, description, brand, color). Le projet explore une approche de classification flat (baseline) avec identification des produits incertains pour validation humaine.
 
-## 🏗️ Structure du Projet
+**Pour une compréhension approfondie des choix stratégiques, résultats détaillés et analyses, consultez le fichier [SYNTHESE.md](SYNTHESE.md).**
+
+## Structure du Projet
 
 ```
 ClassificationEcommerce/
@@ -12,20 +14,19 @@ ClassificationEcommerce/
 │   ├── trainset.csv          # Données d'entraînement (30,520 produits)
 │   └── testset.csv           # Données de test (7,631 produits)
 ├── audit_taxonomy.py         # Étape 1 : Audit de la taxonomie
-├── classify_flat.py           # Approche 1 : Classification flat (baseline)
-├── classify_hybrid.py         # Approche 2 : Classification hybride
-├── compare_approaches.py      # Analyse comparative détaillée
-├── requirements.txt            # Dépendances Python
-└── README.md                  # Ce fichier
+├── classify_flat.py          # Classification flat (baseline)
+├── requirements.txt          # Dépendances Python
+├── README.md                 # Ce fichier
+└── SYNTHESE.md               # Synthèse détaillée des approches et résultats
 ```
 
-## 🚀 Installation
+## Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 📊 Approche Méthodologique
+## Approche Méthodologique
 
 ### Étape 1 : Audit de la Taxonomie
 
@@ -44,105 +45,55 @@ python3 audit_taxonomy.py
 - Profondeur variable : 3 à 8 niveaux (médiane : 6)
 - Aucune incohérence structurelle détectée
 - 32 catégories avec faible cohérence sémantique (< 0.4)
+- 68 catégories avec haute cohérence sémantique (≥ 0.4)
+- Génération de noms de catégories à partir des mots-clés fréquents
 
-### Étape 2 : Classification
+**Fichiers générés :**
+- `category_names.json` : Noms générés pour chaque catégorie avec exemples
+- `low_coherence_categories.json` : Catégories à faible cohérence sémantique
+- `high_coherence_categories.json` : Catégories à haute cohérence sémantique
 
-#### Approche 1 : Flat Classification (Baseline)
+### Étape 2 : Classification Flat (Baseline)
 
-**Principe :** Prédiction directe de la catégorie feuille parmi les 100 classes.
+**Principe :** Prédiction directe de la catégorie feuille parmi les 100 classes, avec identification des produits incertains basée sur les scores de confiance.
 
-**Avantages :**
-- Simplicité et rapidité
-- Meilleure performance (accuracy : 77.47%)
-- Un seul modèle à maintenir
+**Architecture :**
+- Embeddings : Modèle multilingue `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions)
+- Classifieur : Logistic Regression
+- Features : Concaténation de title + description
 
 **Exécution :**
 ```bash
 python3 classify_flat.py
 ```
 
-#### Approche 2 : Hybrid Classification
+**Résultats :**
+- Accuracy : 77.47% sur le test set
+- 75.5% des produits avec confiance ≥ 0.5 (certains)
+- 24.5% des produits avec confiance < 0.5 (incertains, nécessitent validation humaine)
 
-**Principe :** Classification flat avec identification des produits incertains et scores de confiance.
+**Fichiers générés :**
+- `flat_model.pkl` : Modèle entraîné sauvegardé
+- `certain_categories_analysis.json` : Top 10 catégories avec produits certains
+- `uncertain_categories_analysis.json` : Top 10 catégories problématiques
+- `confusion_patterns.json` : Top 10 patterns de confusion entre catégories
 
-**Avantages :**
-- Même performance que flat (77.47%)
-- Identification des produits à faible confiance pour validation humaine
-- Métriques de monitoring (1,873 produits incertains identifiés sur 7,631)
-- Export JSON pour workflow de validation humaine
-
-**Exécution :**
-```bash
-python3 classify_hybrid.py
-```
-
-**Sorties :**
-- `uncertain_products/uncertain_products.json` : Produits avec confiance < 0.5
-
-### Analyse Comparative
-
-**Exécution :**
-```bash
-python3 compare_approaches.py
-```
-
-Génère un rapport complet (`comparison_report.json`) avec :
-- Métriques comparatives détaillées
-- Analyse des erreurs (top catégories confondues)
-- Exemples d'erreurs
-- Recommandations
-
-## 📈 Résultats Principaux
+## Résultats Principaux
 
 ### Performance Globale
 
-| Approche | Accuracy | Temps Entraînement | Erreurs |
-|----------|----------|-------------------|---------|
-| **Flat** | 77.47% | ~30s | 1,721 (22.53%) |
-| **Hybride** | 77.47% | ~35s | 1,721 (22.53%) |
+- **Accuracy** : 77.47% sur le test set (1,721 erreurs sur 7,631 produits)
+- **Sur-apprentissage modéré** : Écart de 7.72 points entre train (85.19%) et test (77.47%)
+- **Distribution de confiance** : 75.5% produits certains, 24.5% produits incertains
 
 ### Insights Clés
 
-1. **Performance identique** : Les deux approches atteignent la même accuracy (77.47%)
-2. **Valeur ajoutée hybride** : Identification de 1,873 produits incertains (24.5% du test set)
-3. **Accuracy produits haute confiance** : 88.61% sur les produits avec confiance ≥ 0.5
-4. **Accuracy produits faible confiance** : 41.57% sur les produits avec confiance < 0.5
+1. **Performance solide** : 77.47% d'accuracy avec un modèle simple (Logistic Regression)
+2. **Identification efficace** : 1,873 produits incertains identifiés (24.5% du test set) pour validation humaine
+3. **Catégories problématiques** : Top 3 catégories avec le plus d'incertitude (ex: "Haut Parleur Noir" avec 62.1% d'incertitude)
+4. **Patterns de confusion** : Identification des paires de catégories régulièrement confondues (ex: "Machine Laver Linge" vs "Linge Lave Laver")
 
-## 💡 Recommandations
-
-### Pour la Production
-
-**Approche recommandée : Hybride**
-
-**Justification :**
-- Performance identique à flat
-- Identification automatique des produits nécessitant validation humaine
-- Réduction de 75% du volume à valider manuellement (1,873 vs 7,631)
-- Métriques de confiance pour monitoring qualité
-- Workflow opérationnel prêt pour validation humaine
-
-**Cas d'usage :**
-- **Flat** : Production simple où seule la performance maximale compte
-- **Hybride** : Production avec validation humaine, monitoring qualité, amélioration continue
-
-## 🔍 Limitations et Améliorations Futures
-
-### Limitations Actuelles
-
-1. **Modèle simple** : Logistic Regression (pas de deep learning)
-2. **Features basiques** : Seulement title + description (pas d'exploitation de brand/color)
-3. **Pas de réentraînement** : Les corrections humaines ne sont pas intégrées automatiquement
-4. **Seuil fixe** : Le seuil de confiance (0.5) n'est pas adaptatif
-
-### Améliorations Possibles
-
-1. **Modèles plus sophistiqués** : BERT fine-tuné, Transformers
-2. **Features enrichies** : Exploitation de brand, color, embeddings hiérarchiques
-3. **Apprentissage actif** : Réentraînement avec produits corrigés manuellement
-4. **Seuil adaptatif** : Ajustement dynamique selon la catégorie
-5. **Fallback hiérarchique** : Utiliser catégorie parente si confiance très faible
-
-## 📝 Technologies Utilisées
+## Technologies Utilisées
 
 - **Python 3**
 - **scikit-learn** : Classification (Logistic Regression)
@@ -150,13 +101,6 @@ Génère un rapport complet (`comparison_report.json`) avec :
 - **pandas** : Manipulation de données
 - **numpy** : Calculs numériques
 
-## 📄 Fichiers Générés
+## Documentation Complémentaire
 
-- `rare_categories.json` : Catégories rares (< 10 produits)
-- `low_coherence_categories.json` : Catégories à faible cohérence sémantique
-- `uncertain_products/uncertain_products.json` : Produits incertains pour validation
-- `comparison_report.json` : Rapport d'analyse comparative complet
-
-## 👤 Auteur
-
-Test technique - Classification E-commerce
+Pour une analyse détaillée des choix stratégiques, des résultats complets, des exemples d'erreurs et des axes d'amélioration, consultez le fichier **[SYNTHESE.md](SYNTHESE.md)**.

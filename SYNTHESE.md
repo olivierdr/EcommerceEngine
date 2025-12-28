@@ -136,28 +136,10 @@ Une fois une taxonomie jugée satisfaisante, plusieurs questions structurantes d
 
 Ces éléments conditionnent la robustesse, la scalabilité et la maintenabilité du système de classification à long terme.
 
-## Axes d'amélioration prioritaires
+## Résumé et perspectives
 
-### Court terme
+L'approche retenue combine un **audit préalable** de la taxonomie et une **classification flat simple mais efficace** (77.47% d'accuracy), permettant d'identifier automatiquement les produits incertains pour validation humaine.
 
-1. **Exploitation de brand/color** : Normaliser et encoder ces features de manière plus efficace (fréquence, embedding, plutôt que one-hot) pour enrichir les features sans explosion dimensionnelle.
+Les principales **limites** résident dans la simplicité du modèle (Logistic Regression), l'absence d'exploitation de la hiérarchie et des features enrichies (brand/color), ainsi que le manque de mécanismes de réentraînement et de monitoring.
 
-2. **Seuil adaptatif** : Ajuster le seuil de confiance par catégorie selon leur difficulté intrinsèque (catégories à faible cohérence sémantique nécessitent un seuil plus strict).
-
-3. **Fallback hiérarchique** : Pour les produits à très faible confiance, proposer la catégorie parente comme alternative plutôt qu'une feuille incorrecte.
-
-### Moyen terme
-
-1. **Modèles plus sophistiqués** : BERT fine-tuné sur le domaine e-commerce, ou Transformers adaptés à la classification hiérarchique.
-
-2. **Apprentissage actif** : Réentraînement périodique avec les produits corrigés manuellement, en privilégiant les catégories problématiques.
-
-3. **Features hiérarchiques** : Embeddings qui capturent explicitement la structure hiérarchique (position dans l'arbre, chemin complet).
-
-### Long terme
-
-1. **Système de feedback** : Pipeline automatisé pour intégrer les corrections humaines et améliorer continuellement le modèle.
-
-2. **Détection de nouvelles catégories** : Mécanisme pour identifier automatiquement des produits non classables dans les catégories existantes.
-
-3. **Optimisation continue** : A/B testing de différents modèles, monitoring de la performance en temps réel, alertes automatiques en cas de dérive.
+Les **améliorations prioritaires** incluent l'exploitation efficace de brand/color, l'ajout d'un fallback hiérarchique pour les cas incertains, et à plus long terme, l'intégration de modèles plus sophistiqués (BERT fine-tuné) et d'un système de feedback pour amélioration continue.
