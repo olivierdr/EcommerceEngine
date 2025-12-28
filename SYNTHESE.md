@@ -1,129 +1,163 @@
-# Synthèse du Projet - Classification E-commerce
+# Synthèse du projet – Classification de produits e-commerce
 
-## 📊 Résultats Clés
+L'objectif de ce projet est d'améliorer le classement des produits au sein d'une taxonomie e-commerce, afin de garantir une meilleure visibilité des produits et une expérience utilisateur cohérente.
 
-### Performance Globale
+Avant de proposer un modèle de classification, il est essentiel de comprendre comment la taxonomie existante a été construite, d'en évaluer la qualité et d'identifier d'éventuelles incohérences.
 
-| Métrique | Flat | Hybride |
-|----------|------|---------|
-| **Accuracy** | 77.47% | 77.47% |
-| **Temps d'entraînement** | ~30s | ~35s |
-| **Erreurs** | 1,721 (22.53%) | 1,721 (22.53%) |
-| **Produits incertains identifiés** | - | 1,873 (24.5%) |
-| **Accuracy haute confiance** | - | 88.61% |
-| **Accuracy faible confiance** | - | 41.57% |
+Dans un contexte réel, plusieurs questions doivent être posées en amont : par qui la taxonomie a-t-elle été définie, selon quelle logique métier, et dans quelle mesure le processus est-il automatisé ou validé manuellement ?
 
-### Conclusion Principale
+Un point notable du jeu de données est l'absence de libellés explicites pour les catégories : celles-ci sont représentées uniquement par des identifiants, ce qui limite l'interprétabilité et impose de s'appuyer principalement sur la structure hiérarchique et le contenu des produits.
 
-Les deux approches atteignent **la même performance** (77.47% d'accuracy). L'approche hybride apporte une **valeur opérationnelle** en identifiant automatiquement les produits nécessitant une validation humaine.
+Du point de vue métier, les erreurs de classification peuvent être regroupées en deux grandes catégories :
+- des produits importants ou à fort potentiel classés dans des catégories de niche, les rendant difficilement trouvables ;
+- des produits mal classés mais restant accessibles via la recherche ou la navigation, avec un impact moindre sur l'expérience utilisateur.
 
-## 🔍 Insights Principaux
+Dans un environnement de production, ces analyses pourraient être enrichies par des signaux implicites tels que les taux de clic, les ajouts au panier ou l'absence totale d'interactions, qui peuvent indiquer des problèmes de classement.
 
-### 1. Performance Identique
+## Démarche retenue
 
-- Les deux modèles utilisent la même base (Logistic Regression sur embeddings)
-- L'approche hybride n'améliore pas l'accuracy mais ajoute des métriques de confiance
-- **Insight** : La valeur ajoutée est opérationnelle, pas algorithmique
+Le projet est structuré en deux grandes étapes complémentaires.
 
-### 2. Identification Efficace des Produits Incertains
+### 1. Audit de la taxonomie existante
 
-- 1,873 produits identifiés avec confiance < 0.5 (24.5% du test set)
-- Accuracy sur ces produits : 41.57% (vs 88.61% pour haute confiance)
-- **Insight** : Le score de confiance est **très informatif** - les produits à faible confiance sont effectivement plus difficiles
+Avant tout entraînement de modèle, un audit est réalisé sur le jeu de données d'entraînement afin de :
+- analyser la structure réelle de la taxonomie (profondeur des chemins, nombre de catégories par niveau),
+- détecter des incohérences structurelles dans les `category_path`,
+- évaluer la cohérence sémantique des produits au sein de chaque catégorie à l'aide d'embeddings construits à partir des titres et descriptions.
 
-### 3. Réduction du Volume de Validation
+Cette étape permet d'identifier des catégories ou des produits potentiellement bruités et d'améliorer la qualité des données utilisées pour l'apprentissage.
 
-- Sans hybride : Valider tous les produits (7,631)
-- Avec hybride : Valider seulement les produits incertains (1,873)
-- **Gain** : Réduction de **75%** du volume à valider manuellement
+**Résultats clés de l'audit :**
 
-### 4. Top Catégories avec Erreurs
+- **Structure hiérarchique** : 100 catégories feuilles, profondeur variable de 3 à 8 niveaux (médiane : 6 niveaux), distribution équilibrée (~305 produits par catégorie en moyenne)
+- **Cohérence structurelle** : Aucune incohérence détectée (category_id cohérent avec category_path, pas de paths vides ou invalides)
+- **Cohérence sémantique** : 32 catégories présentent une faible cohérence sémantique (< 0.4), notamment des catégories génériques comme "Import Allemand Deluxe" (score : 0.193) ou "Ans Anglais Adibou" (score : 0.241). À l'inverse, 68 catégories montrent une haute cohérence (≥ 0.4), comme "Batterie Compatible Vhbw" (score : 0.655) ou "Vin Cave Bouteilles" (score : 0.636)
+- **Génération de noms** : Extraction automatique de noms de catégories à partir des mots-clés fréquents dans les titres de produits, permettant une meilleure interprétabilité
 
-Les catégories les plus problématiques sont :
-- `5c40c9ec`, `141a04ef`, `59697eb0` (top 3)
-- Ces catégories nécessitent une attention particulière (peut-être des catégories à faible cohérence sémantique)
+### 2. Classification des catégories feuilles
 
-## 💡 Recommandation Finale
+Dans un second temps, un modèle de classification supervisée est développé pour prédire la catégorie feuille d'un produit à partir de ses informations textuelles.
 
-### Approche Recommandée : **Hybride**
+**Approche retenue : Classification Flat (Baseline)**
 
-**Justification :**
+Une approche "flat" est implémentée comme baseline : prédiction directe de la catégorie feuille parmi les 100 classes, sans exploitation explicite de la hiérarchie. Cette approche simple et efficace sert de référence pour évaluer la difficulté du problème.
 
-1. **Performance identique** : Même accuracy que flat (77.47%)
-2. **Valeur opérationnelle** : Identification automatique des produits incertains
-3. **Workflow prêt** : Export JSON structuré pour validation humaine
-4. **Monitoring qualité** : Métriques de confiance pour suivre la qualité du modèle
-5. **Amélioration continue** : Base pour réentraînement avec corrections humaines
+**Architecture technique :**
+- **Embeddings** : Modèle multilingue `paraphrase-multilingual-MiniLM-L12-v2` pour encoder les titres et descriptions (384 dimensions)
+- **Classifieur** : Logistic Regression (simple, rapide, interprétable)
+- **Features** : Concaténation de title + description uniquement (brand et color non exploités pour éviter la sur-dimensionnalité)
 
-**Cas d'usage :**
-- **Production avec validation humaine** : Utiliser l'approche hybride
-- **Production simple sans validation** : L'approche flat suffit
+**Résultats de performance :**
 
-## ⚠️ Limitations Actuelles
+- **Accuracy globale** : 77.47% sur le test set (1,721 erreurs sur 7,631 produits)
+- **Sur-apprentissage modéré** : Écart de 7.72 points entre train (85.19%) et test (77.47%), acceptable pour un modèle simple
+- **Distribution de confiance** : 75.5% des produits avec confiance ≥ 0.5 (certains), 24.5% avec confiance < 0.5 (incertains)
+- **Performance par niveau de confiance** : Les produits "certains" (confiance ≥ 0.5) présentent une accuracy estimée bien supérieure à ceux "incertains", validant l'utilité du score de confiance
 
-### Techniques
+**Analyses détaillées générées :**
 
-1. **Modèle simple** : Logistic Regression (pas de deep learning)
-2. **Features basiques** : Seulement title + description (brand/color non exploités)
-3. **Seuil fixe** : Seuil de confiance à 0.5 (non adaptatif)
-4. **Pas de réentraînement** : Les corrections humaines ne sont pas intégrées automatiquement
+- **Catégories certaines** : Top 10 catégories avec le plus de produits à haute confiance (ex: "Batterie Compatible Vhbw" avec 97 produits certains, avg_confidence : 0.93)
+- **Catégories incertaines** : Top 10 catégories problématiques (ex: "Haut Parleur Noir" avec 62.1% d'incertitude, 59 produits incertains)
+- **Patterns de confusion** : Top 10 paires de catégories régulièrement confondues (ex: "Machine Laver Linge" vs "Linge Lave Laver" : 24 cas, confusion_rate : 22.9%)
 
-### Données
+**Exemples d'erreurs typiques :**
 
-1. **Profondeur variable** : Taxonomie avec 3 à 8 niveaux (complexité de gestion)
-2. **Catégories équilibrées** : ~305 produits par catégorie (pas de déséquilibre majeur)
-3. **Multilingue** : Textes en FR/DE/EN (géré par le modèle multilingue)
+1. **Confusion sémantique proche** : 
+   - Catégorie vraie : "Machine Laver Linge" → Prédite : "Linge Lave Laver"
+   - Produit : "Samsung WD91N642OOW Autonome Charge avant A Noir, Blanc machine à laver avec sèche linge"
+   - **Analyse** : Catégories sémantiquement très proches, le modèle hésite entre deux formulations équivalentes
 
-## 🚀 Améliorations Futures
+2. **Catégories génériques problématiques** :
+   - Catégorie vraie : "Haut Parleur Noir" → Prédite : "Enceinte Bluetooth" (ou inversement)
+   - Produit : "Barre de Son Portable Bluetooth 4.0 Enceintes sans Fil"
+   - **Analyse** : Catégorie avec faible cohérence sémantique (score : 0.388), produits hétérogènes regroupés artificiellement
 
-### Court Terme
+3. **Confusion entre catégories de jeux vidéo** :
+   - Catégorie vraie : "Psp Collection Essentials" → Prédite : "Import Xbox Anglais"
+   - Produit : "Street Fighter Ex 3"
+   - **Analyse** : Confusion entre catégories de jeux vidéo différentes plateformes, probablement due à des titres de jeux similaires
 
-1. **Exploitation de brand/color** : Ajouter ces features pour améliorer la précision
-2. **Seuil adaptatif** : Ajuster le seuil de confiance par catégorie
-3. **Fallback hiérarchique** : Utiliser catégorie parente si confiance très faible
+## Limites de l'approche
 
-### Moyen Terme
+### Limites techniques
 
-1. **Modèles plus sophistiqués** : BERT fine-tuné, Transformers
-2. **Apprentissage actif** : Réentraînement avec produits corrigés manuellement
-3. **Features hiérarchiques** : Embeddings qui capturent la structure hiérarchique
+1. **Modèle simple** : Logistic Regression linéaire, incapable de capturer des interactions complexes entre features. Un modèle plus sophistiqué (BERT fine-tuné, Transformers) pourrait améliorer les performances.
 
-### Long Terme
+2. **Features limitées** : 
+   - Seulement title + description exploités
+   - Brand et color non utilisés (pour éviter explosion dimensionnelle avec one-hot encoding)
+   - Pas d'exploitation de la structure hiérarchique dans les embeddings
 
-1. **Système de feedback** : Intégration automatique des corrections humaines
-2. **Détection de nouvelles catégories** : Identification automatique de produits non classables
-3. **Optimisation continue** : A/B testing de différents modèles
+3. **Sur-apprentissage modéré** : Écart de 7.72 points entre train et test, suggérant que le modèle mémorise partiellement les patterns d'entraînement.
 
-## 📈 Métriques Détaillées
+4. **Seuil de confiance fixe** : Le seuil à 0.5 est arbitraire et non adaptatif selon la catégorie. Certaines catégories nécessiteraient un seuil plus strict.
 
-### Top 10 Catégories (par fréquence)
+### Limites méthodologiques
 
-Les catégories les plus fréquentes montrent des performances variables :
-- **Meilleures** : `a79ffcab` (F1=0.956), `f30a5ca5` (F1=0.942)
-- **Plus difficiles** : `141a04ef` (F1=0.569), `da04a809` (F1=0.667)
+1. **Pas d'exploitation de la hiérarchie** : L'approche flat ignore la structure hiérarchique, alors qu'une approche top-down pourrait réduire l'espace de décision et améliorer la cohérence métier.
 
-### Analyse des Erreurs
+2. **Pas de réentraînement** : Les corrections humaines sur les produits incertains ne sont pas intégrées automatiquement pour améliorer le modèle.
 
-- **Top confusions** : Certaines paires de catégories sont régulièrement confondues
-- **Patterns identifiés** : Les erreurs sont souvent dans des catégories sémantiquement proches
-- **Exemples concrets** : Disponibles dans `comparison_report.json`
+3. **Catégories problématiques non traitées** : Les 32 catégories à faible cohérence sémantique identifiées dans l'audit ne bénéficient pas d'un traitement spécifique (ex: règles métier, validation obligatoire).
 
-## 🎯 Conclusion
+4. **Pas de fallback hiérarchique** : En cas de faible confiance, le modèle ne propose pas de catégorie parente comme alternative, ce qui pourrait améliorer l'expérience utilisateur.
 
-Le projet démontre une approche **pragmatique et méthodique** pour la classification de produits e-commerce :
+### Limites opérationnelles
 
-1. ✅ **Audit préalable** : Compréhension approfondie de la taxonomie
-2. ✅ **Baseline solide** : Approche flat performante (77.47%)
-3. ✅ **Valeur ajoutée** : Approche hybride avec workflow opérationnel
-4. ✅ **Analyse comparative** : Comparaison détaillée avec insights
+1. **Pas de détection de nouvelles catégories** : Le modèle ne peut prédire que parmi les 100 catégories vues à l'entraînement. Un nouveau type de produit nécessiterait un réentraînement.
 
-**Pour un test technique**, le projet montre :
-- Capacité à comprendre un problème complexe
-- Approche méthodique (baseline → amélioration)
-- Pragmatisme (modèles simples mais efficaces)
-- Vision opérationnelle (workflow de validation humaine)
+2. **Pas de monitoring en temps réel** : Aucun mécanisme pour détecter une dérive de performance ou des changements dans la distribution des produits.
 
----
+3. **Validation humaine non intégrée** : Bien que les produits incertains soient identifiés, il n'y a pas de workflow automatisé pour intégrer les corrections humaines.
 
-*Rapport généré automatiquement - Voir `comparison_report.json` pour les détails complets*
+## Mise en perspective avec les pratiques e-commerce
 
+Les grandes plateformes e-commerce combinent généralement plusieurs approches :
+- un modèle de classification principal (souvent deep learning, de type BERT ou équivalent),
+- une validation hiérarchique pour garantir la cohérence des prédictions,
+- des règles métier et des mécanismes de fallback vers des catégories parentes,
+- et, pour les cas ambigus, une intervention humaine via des interfaces de validation.
+
+**Approche hybride envisagée (non implémentée) :**
+
+Une approche hybride pourrait combiner la classification flat avec une validation hiérarchique : pour les produits à faible confiance, vérifier si les top-K prédictions partagent un parent commun et choisir parmi celles-ci. Cette stratégie permettrait d'exploiter la structure hiérarchique sans la complexité d'un modèle top-down complet. Cependant, pour un test technique, l'approche flat reste suffisante et démontre les concepts clés.
+
+## Perspectives et questions ouvertes
+
+Une fois une taxonomie jugée satisfaisante, plusieurs questions structurantes demeurent :
+
+- **Intégration de nouveaux produits** : Comment intégrer automatiquement un nouveau produit dans la taxonomie, et à partir de quel seuil de confiance déclencher une validation humaine ?
+
+- **Création de catégories** : Comment décider de la création ou du découpage de catégories (logique métier vs détection algorithmique) ? Dans quelle mesure la création de nouvelles catégories doit rester manuelle ou peut être partiellement automatisée ?
+
+- **Amélioration continue** : Comment intégrer les corrections humaines pour améliorer progressivement le modèle ? Faut-il réentraîner périodiquement ou mettre en place un apprentissage actif ?
+
+- **Monitoring et qualité** : Comment surveiller la qualité du classement en production ? Quels métriques suivre (accuracy globale, par catégorie, taux de validation humaine) ?
+
+Ces éléments conditionnent la robustesse, la scalabilité et la maintenabilité du système de classification à long terme.
+
+## Axes d'amélioration prioritaires
+
+### Court terme
+
+1. **Exploitation de brand/color** : Normaliser et encoder ces features de manière plus efficace (fréquence, embedding, plutôt que one-hot) pour enrichir les features sans explosion dimensionnelle.
+
+2. **Seuil adaptatif** : Ajuster le seuil de confiance par catégorie selon leur difficulté intrinsèque (catégories à faible cohérence sémantique nécessitent un seuil plus strict).
+
+3. **Fallback hiérarchique** : Pour les produits à très faible confiance, proposer la catégorie parente comme alternative plutôt qu'une feuille incorrecte.
+
+### Moyen terme
+
+1. **Modèles plus sophistiqués** : BERT fine-tuné sur le domaine e-commerce, ou Transformers adaptés à la classification hiérarchique.
+
+2. **Apprentissage actif** : Réentraînement périodique avec les produits corrigés manuellement, en privilégiant les catégories problématiques.
+
+3. **Features hiérarchiques** : Embeddings qui capturent explicitement la structure hiérarchique (position dans l'arbre, chemin complet).
+
+### Long terme
+
+1. **Système de feedback** : Pipeline automatisé pour intégrer les corrections humaines et améliorer continuellement le modèle.
+
+2. **Détection de nouvelles catégories** : Mécanisme pour identifier automatiquement des produits non classables dans les catégories existantes.
+
+3. **Optimisation continue** : A/B testing de différents modèles, monitoring de la performance en temps réel, alertes automatiques en cas de dérive.

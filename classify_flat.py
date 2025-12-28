@@ -22,7 +22,7 @@ class FlatClassifier:
     
     def __init__(self, embedding_model_name='paraphrase-multilingual-MiniLM-L12-v2'):
         """Initialise le modèle d'embeddings"""
-        print("🔄 Chargement du modèle d'embeddings...")
+        print("✓ Chargement du modèle d'embeddings...")
         self.embedding_model = SentenceTransformer(embedding_model_name)
         self.classifier = None
         self.label_encoder = None
@@ -35,11 +35,11 @@ class FlatClassifier:
         # Vérifier le cache si un chemin est fourni
         if cache_path and Path(cache_path).exists():
             if show_progress:
-                print(f"📝 Chargement des embeddings depuis le cache...")
+                print(f"Chargement des embeddings depuis le cache...")
             return np.load(cache_path)
         
         if show_progress:
-            print("📝 Préparation des features...")
+            print("Préparation des features...")
         texts = (df['title'].fillna('') + ' ' + df['description'].fillna('')).str.strip()
         text_embeddings = self.embedding_model.encode(
             texts.tolist(), 
@@ -61,11 +61,11 @@ class FlatClassifier:
     def train(self, train_path):
         """Entraîne le modèle sur le train set"""
         print("\n" + "="*60)
-        print("🚀 ENTRAÎNEMENT - Classification Flat")
+        print("ENTRAÎNEMENT - Classification Flat")
         print("="*60)
         
         # Charger les données
-        print("\n📊 Chargement des données d'entraînement...")
+        print("\nChargement des données d'entraînement...")
         df_train = pd.read_csv(train_path)
         print(f"   ✓ {len(df_train):,} produits chargés")
         
@@ -80,12 +80,12 @@ class FlatClassifier:
         self.label_encoder = LabelEncoder()
         y_train_encoded = self.label_encoder.fit_transform(y_train)
         
-        print(f"\n📈 Statistiques:")
+        print(f"\nStatistiques:")
         print(f"   Nombre de catégories: {len(self.label_encoder.classes_)}")
         print(f"   Dimension des embeddings: {self.X_train.shape[1]}")
         
         # Entraîner le classifieur
-        print("\n🎯 Entraînement du classifieur (Logistic Regression)...")
+        print("\nEntraînement du classifieur (Logistic Regression)...")
         self.classifier = LogisticRegression(max_iter=1000, random_state=42, n_jobs=-1)
         self.classifier.fit(self.X_train, y_train_encoded)
         print("   ✓ Modèle entraîné")
@@ -117,18 +117,18 @@ class FlatClassifier:
     def evaluate(self, train_path=None, test_path=None, confidence_threshold=0.5, df_train=None, df_test=None):
         """Évalue le modèle sur train et test pour détecter le sur-apprentissage"""
         print("\n" + "="*60)
-        print("📊 ÉVALUATION - Classification Flat")
+        print("ÉVALUATION - Classification Flat")
         print("="*60)
         
         # Évaluation sur train : réutiliser les embeddings si disponibles
         if df_train is None:
             if hasattr(self, 'df_train') and self.df_train is not None:
                 df_train = self.df_train
-                print("\n📊 Évaluation sur données d'entraînement (réutilisation des données)...")
+                print("\nÉvaluation sur données d'entraînement...")
             else:
                 if train_path is None:
                     raise ValueError("train_path ou df_train doit être fourni")
-                print("\n📊 Évaluation sur données d'entraînement...")
+                print("\nÉvaluation sur données d'entraînement...")
                 df_train = pd.read_csv(train_path)
         
         # Réutiliser X_train si disponible, sinon recalculer
@@ -155,7 +155,7 @@ class FlatClassifier:
         if df_test is None:
             if test_path is None:
                 raise ValueError("test_path ou df_test doit être fourni")
-            print("\n📊 Évaluation sur données de test...")
+            print("\nÉvaluation sur données de test...")
             df_test = pd.read_csv(test_path)
         
         # Générer un hash du chemin pour le cache
@@ -184,7 +184,7 @@ class FlatClassifier:
         print(f"   Precision: {test_prec:.4f} | Recall: {test_rec:.4f} | F1: {test_f1:.4f}")
         
         # Comparaison train vs test
-        print("\n📈 Comparaison Train vs Test:")
+        print("\nComparaison Train vs Test:")
         gap_acc = train_acc - test_acc
         gap_prec = train_prec - test_prec
         gap_rec = train_rec - test_rec
@@ -194,9 +194,9 @@ class FlatClassifier:
         print(f"   Écart Precision: {gap_prec:.4f} | Recall: {gap_rec:.4f} | F1: {gap_f1:.4f}")
         
         if gap_acc > 0.05:
-            print(f"   ⚠️  Sur-apprentissage détecté (écart > 5 points)")
+            print(f"Warning: Sur-apprentissage détecté (écart > 5 points)")
         else:
-            print(f"   ✅ Pas de sur-apprentissage significatif")
+            print(f"✓ Pas de sur-apprentissage significatif")
         
         # Analyses détaillées : catégories certaines, incertaines et patterns de confusion
         self.analyze_categories(df_test, y_pred_test, conf_test, y_true_test, confidence_threshold)
@@ -210,7 +210,7 @@ class FlatClassifier:
                 'embedding_model_name': 'paraphrase-multilingual-MiniLM-L12-v2',
                 'cat_to_path': self.cat_to_path
             }, f)
-        print(f"\n💾 Modèle sauvegardé: {model_path}")
+        print(f"\nModèle sauvegardé: {model_path}")
         
         return {
             'train_accuracy': train_acc,
@@ -221,9 +221,9 @@ class FlatClassifier:
         }
     
     def analyze_categories(self, df, predictions, confidence_scores, y_true, threshold=0.5):
-        """Analyse unifiée : génère les 3 JSON (certain, uncertain, confusion) en une seule passe"""
+        """Analyse unifiée : génère les 3 JSON (certain, uncertain, confusion)"""
         print("\n" + "="*60)
-        print("📊 ANALYSES DÉTAILLÉES")
+        print("ANALYSES DÉTAILLÉES")
         print("="*60)
         
         # Charger les noms de catégories
@@ -390,7 +390,6 @@ class FlatClassifier:
 
 
 def main():
-    """Point d'entrée principal"""
     print("\n" + "="*60)
     print("CLASSIFICATION FLAT")
     print("="*60)
@@ -400,13 +399,13 @@ def main():
     
     # Vérifier que les fichiers existent
     if not train_path.exists():
-        print(f"❌ Fichier non trouvé: {train_path}")
+        print(f"Fichier non trouvé: {train_path}")
         return
     if not test_path.exists():
-        print(f"❌ Fichier non trouvé: {test_path}")
+        print(f"Fichier non trouvé: {test_path}")
         return
     
-    print("\n🔄 Entraînement du classifieur...")
+    print("\nEntraînement du classifieur...")
     # Créer et entraîner le classifieur
     classifier = FlatClassifier()
     classifier.train(train_path)
