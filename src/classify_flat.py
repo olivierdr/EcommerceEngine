@@ -159,7 +159,7 @@ class FlatClassifier:
             df_test = pd.read_csv(test_path)
         
         # Générer un hash du chemin pour le cache
-        cache_dir = Path(__file__).parent / '.cache'
+        cache_dir = Path(__file__).parent.parent / '.cache'
         cache_dir.mkdir(exist_ok=True)
         if test_path:
             cache_hash = hashlib.md5(str(test_path).encode()).hexdigest()
@@ -202,7 +202,8 @@ class FlatClassifier:
         self.analyze_categories(df_test, y_pred_test, conf_test, y_true_test, confidence_threshold)
         
         # Sauvegarder le modèle avec métadonnées pour la production
-        model_path = Path(__file__).parent / 'flat_model.pkl'
+        model_path = Path(__file__).parent.parent / 'results' / 'classification' / 'flat_model.pkl'
+        model_path.parent.mkdir(parents=True, exist_ok=True)
         with open(model_path, 'wb') as f:
             pickle.dump({
                 'classifier': self.classifier,
@@ -227,7 +228,7 @@ class FlatClassifier:
         print("="*60)
         
         # Charger les noms de catégories
-        names_path = Path(__file__).parent / 'category_names.json'
+        names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
         category_names = {}
         if names_path.exists():
             with open(names_path, 'r', encoding='utf-8') as f:
@@ -329,7 +330,9 @@ class FlatClassifier:
         # Trier et sauvegarder Certain
         certain_stats.sort(key=lambda x: x['n_certain_products'], reverse=True)
         certain_df = df_analysis[df_analysis['is_certain']]
-        with open(Path(__file__).parent / 'certain_categories_analysis.json', 'w', encoding='utf-8') as f:
+        output_path_certain = Path(__file__).parent.parent / 'results' / 'classification' / 'certain_categories_analysis.json'
+        output_path_certain.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path_certain, 'w', encoding='utf-8') as f:
             json.dump({
                 'summary': {
                     'total_certain_products': len(certain_df),
@@ -343,7 +346,9 @@ class FlatClassifier:
         # Trier et sauvegarder Uncertain
         uncertain_stats.sort(key=lambda x: x['n_uncertain_products'], reverse=True)
         uncertain_df = df_analysis[~df_analysis['is_certain']]
-        with open(Path(__file__).parent / 'uncertain_categories_analysis.json', 'w', encoding='utf-8') as f:
+        output_path_uncertain = Path(__file__).parent.parent / 'results' / 'classification' / 'uncertain_categories_analysis.json'
+        output_path_uncertain.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path_uncertain, 'w', encoding='utf-8') as f:
             json.dump({
                 'summary': {
                     'total_uncertain_products': len(uncertain_df),
@@ -375,7 +380,9 @@ class FlatClassifier:
             })
         
         patterns.sort(key=lambda x: x['n_cases'], reverse=True)
-        with open(Path(__file__).parent / 'confusion_patterns.json', 'w', encoding='utf-8') as f:
+        output_path_confusion = Path(__file__).parent.parent / 'results' / 'classification' / 'confusion_patterns.json'
+        output_path_confusion.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path_confusion, 'w', encoding='utf-8') as f:
             json.dump({
                 'summary': {
                     'total_confusion_cases': len(errors_all),
@@ -393,7 +400,7 @@ def main():
     print("\n" + "="*60)
     print("CLASSIFICATION FLAT")
     print("="*60)
-    base_path = Path(__file__).parent
+    base_path = Path(__file__).parent.parent
     train_path = base_path / 'data' / 'trainset.csv'
     test_path = base_path / 'data' / 'testset.csv'
     

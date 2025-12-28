@@ -1,66 +1,31 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+*.pyc
 *.egg-info/
-.installed.cfg
-*.egg
+dist/
+build/
 
 # Virtual environments
 venv/
 env/
-ENV/
 .venv
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 .DS_Store
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Modèles ML (sentence-transformers télécharge les modèles)
+# Cache et modèles ML
 .cache/
-models/
 *.pkl
-*.h5
-*.pt
-*.pth
 
-# Fichiers générés par l'audit
-rare_categories.json
-low_coherence_categories.json
+# Données - ignorer les fichiers CSV dans data/ mais garder le dossier
+data/*.csv
+data/*.CSV
 
-# Données (optionnel - à décommenter si les données ne doivent pas être versionnées)
-# data/
-
-# Logs
-*.log
-
-# Fichiers temporaires
-*.tmp
-*.temp
-
-#data
-data/
+# Fichiers générés par les scripts
+*.json
 Guidelines.pdf
 uncertain_products/
 comparison_report.json

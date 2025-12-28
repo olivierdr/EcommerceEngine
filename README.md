@@ -10,14 +10,30 @@ Classification automatique de produits e-commerce dans des catégories feuilles 
 
 ```
 ClassificationEcommerce/
-├── data/
-│   ├── trainset.csv          # Données d'entraînement (30,520 produits)
-│   └── testset.csv           # Données de test (7,631 produits)
-├── audit_taxonomy.py         # Étape 1 : Audit de la taxonomie
-├── classify_flat.py          # Classification flat (baseline)
-├── requirements.txt          # Dépendances Python
-├── README.md                 # Ce fichier
-└── SYNTHESE.md               # Synthèse détaillée des approches et résultats
+├── data/                          # Données d'entrée (CSV)
+│   ├── .gitkeep
+│   ├── trainset.csv              # Données d'entraînement (30,520 produits)
+│   └── testset.csv               # Données de test (7,631 produits)
+│
+├── src/                           # Code source
+│   ├── audit_taxonomy.py         # Étape 1 : Audit de la taxonomie
+│   └── classify_flat.py          # Classification flat (baseline)
+│
+├── results/                       # Résultats générés
+│   ├── audit/                    # Résultats de l'audit
+│   │   ├── category_names.json
+│   │   ├── low_coherence_categories.json
+│   │   └── high_coherence_categories.json
+│   └── classification/           # Résultats de la classification
+│       ├── flat_model.pkl
+│       ├── certain_categories_analysis.json
+│       ├── uncertain_categories_analysis.json
+│       └── confusion_patterns.json
+│
+├── .cache/                        # Cache (embeddings, etc.)
+├── requirements.txt
+├── README.md                      # Ce fichier
+└── SYNTHESE.md                    # Synthèse détaillée des approches et résultats
 ```
 
 ## Installation
@@ -25,6 +41,8 @@ ClassificationEcommerce/
 ```bash
 pip install -r requirements.txt
 ```
+
+**Important :** Placez vos fichiers `trainset.csv` et `testset.csv` dans le dossier `data/` avant d'exécuter les scripts.
 
 ## Approche Méthodologique
 
@@ -37,7 +55,7 @@ Avant toute classification, une analyse approfondie du jeu de données permet de
 
 **Exécution :**
 ```bash
-python3 audit_taxonomy.py
+python3 src/audit_taxonomy.py
 ```
 
 **Résultats :**
@@ -48,7 +66,7 @@ python3 audit_taxonomy.py
 - 68 catégories avec haute cohérence sémantique (≥ 0.4)
 - Génération de noms de catégories à partir des mots-clés fréquents
 
-**Fichiers générés :**
+**Fichiers générés (dans `results/audit/`) :**
 - `category_names.json` : Noms générés pour chaque catégorie avec exemples
 - `low_coherence_categories.json` : Catégories à faible cohérence sémantique
 - `high_coherence_categories.json` : Catégories à haute cohérence sémantique
@@ -64,7 +82,7 @@ python3 audit_taxonomy.py
 
 **Exécution :**
 ```bash
-python3 classify_flat.py
+python3 src/classify_flat.py
 ```
 
 **Résultats :**
@@ -72,7 +90,7 @@ python3 classify_flat.py
 - 75.5% des produits avec confiance ≥ 0.5 (certains)
 - 24.5% des produits avec confiance < 0.5 (incertains, nécessitent validation humaine)
 
-**Fichiers générés :**
+**Fichiers générés (dans `results/classification/`) :**
 - `flat_model.pkl` : Modèle entraîné sauvegardé
 - `certain_categories_analysis.json` : Top 10 catégories avec produits certains
 - `uncertain_categories_analysis.json` : Top 10 catégories problématiques

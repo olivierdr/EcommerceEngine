@@ -158,7 +158,8 @@ class TaxonomyAuditor:
             }
         
         # Sauvegarder
-        output_path = Path(__file__).parent / 'category_names.json'
+        output_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(category_data, f, indent=2, ensure_ascii=False)
         
@@ -169,7 +170,7 @@ class TaxonomyAuditor:
     
     def load_category_names(self):
         """Charge les noms de catégories depuis category_names.json"""
-        names_path = Path(__file__).parent / 'category_names.json'
+        names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
         if names_path.exists():
             with open(names_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -323,7 +324,8 @@ class TaxonomyAuditor:
         high_coherence_data.sort(key=lambda x: x['coherence_score'], reverse=True)
         
         # Sauvegarder low_coherence_categories.json
-        output_path_low = Path(__file__).parent / 'low_coherence_categories.json'
+        output_path_low = Path(__file__).parent.parent / 'results' / 'audit' / 'low_coherence_categories.json'
+        output_path_low.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path_low, 'w', encoding='utf-8') as f:
             json.dump({
                 'threshold': threshold,
@@ -332,7 +334,7 @@ class TaxonomyAuditor:
             }, f, indent=2, ensure_ascii=False)
         
         # Sauvegarder high_coherence_categories.json
-        output_path_high = Path(__file__).parent / 'high_coherence_categories.json'
+        output_path_high = Path(__file__).parent.parent / 'results' / 'audit' / 'high_coherence_categories.json'
         with open(output_path_high, 'w', encoding='utf-8') as f:
             json.dump({
                 'threshold': threshold,
@@ -371,7 +373,7 @@ class TaxonomyAuditor:
 
 def main():
     """Point d'entrée principal"""
-    data_path = Path(__file__).parent / 'data' / 'trainset.csv'
+    data_path = Path(__file__).parent.parent / 'data' / 'trainset.csv'
     
     if not data_path.exists():
         print(f"Fichier non trouvé: {data_path}")
