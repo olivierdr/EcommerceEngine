@@ -14,6 +14,7 @@ from pathlib import Path
 import json
 import re
 import warnings
+from tqdm import tqdm
 warnings.filterwarnings('ignore')
 
 # Pour les embeddings sémantiques
@@ -284,13 +285,13 @@ class TaxonomyAuditor:
         high_coherence_data = []
         texts_combined = (self.df['title'].fillna('') + ' ' + self.df['description'].fillna('')).str.strip()
         
-        for cat_id in valid_categories:
+        for cat_id in tqdm(valid_categories, desc="Analyse sémantique"):
             cat_products = self.df[self.df['category_id'] == cat_id]
             if len(cat_products) > 100:
                 cat_products = cat_products.sample(n=100, random_state=42)
             
             texts = texts_combined[cat_products.index].tolist()
-            embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
+            embeddings = self.embedding_model.encode(texts, show_progress_bar=False, batch_size=128)
             
             # Distance moyenne intra-classe
             from sklearn.metrics.pairwise import cosine_distances
@@ -342,11 +343,11 @@ class TaxonomyAuditor:
                 'categories': high_coherence_data
             }, f, indent=2, ensure_ascii=False)
         
-        print(f"\n💾 {len(low_coherence_data)} catégories à faible cohérence sauvegardées")
+        print(f"\n{len(low_coherence_data)} catégories à faible cohérence sauvegardées")
         if low_coherence_data:
             print(f"   Top 3: {', '.join([c['category_id'] for c in low_coherence_data[:3]])}")
         
-        print(f"\n💾 {len(high_coherence_data)} catégories à haute cohérence sauvegardées")
+        print(f"\n{len(high_coherence_data)} catégories à haute cohérence sauvegardées")
         if high_coherence_data:
             print(f"   Top 3: {', '.join([c['category_id'] for c in high_coherence_data[:3]])}")
         
@@ -369,7 +370,7 @@ class TaxonomyAuditor:
         missing_in_train = set(test_props.index) - set(train_props.index)
         
         if missing_in_train:
-            print(f"\n⚠️  {len(missing_in_train)} catégories du test absentes du train")
+            print(f"\n{len(missing_in_train)} catégories du test absentes du train")
         
         # Aligner les index pour la corrélation
         common_cats = sorted(set(train_props.index) & set(test_props.index))
