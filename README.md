@@ -40,13 +40,13 @@ ClassificationEcommerce/
 
 1. **Créer un environnement virtuel** (recommandé) :
 ```bash
+cd ./ClassificationEcommerce/
 python3 -m venv venv
 source venv/bin/activate 
 ```
 
 2. **Installer les dépendances** :
 ```bash
-cd ./ClassificationEcommerce/
 pip install -r requirements.txt
 ```
 
