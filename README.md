@@ -46,6 +46,7 @@ source venv/bin/activate
 
 2. **Installer les dépendances** :
 ```bash
+cd ./ClassificationEcommerce/
 pip install -r requirements.txt
 ```
 
