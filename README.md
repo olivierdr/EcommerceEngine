@@ -1,4 +1,4 @@
-# Classification E-commerce - Test Technique
+# Classification E-commerce
 
 ## Objectif
 
