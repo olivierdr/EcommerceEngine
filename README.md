@@ -38,6 +38,13 @@ ClassificationEcommerce/
 
 ## Installation
 
+1. **Créer un environnement virtuel** (recommandé) :
+```bash
+python3 -m venv venv
+source venv/bin/activate 
+```
+
+2. **Installer les dépendances** :
 ```bash
 pip install -r requirements.txt
 ```
