@@ -1,6 +1,6 @@
 """
-API FastAPI pour le service de classification E-commerce
-Avec instrumentation OpenTelemetry pour Cloud Monitoring et Cloud Trace
+FastAPI for E-commerce Classification Service
+With OpenTelemetry instrumentation for Cloud Monitoring and Cloud Trace
 """
 
 import os
@@ -32,7 +32,7 @@ try:
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.requests import RequestsInstrumentor
     
-    # Essayer d'importer Cloud Monitoring (peut être en alpha)
+    # Try to import Cloud Monitoring (may be in alpha)
     try:
         from opentelemetry.exporter.gcp.monitoring import GcpMonitoringMetricsExporter
         from opentelemetry.sdk.metrics import MeterProvider
@@ -40,38 +40,38 @@ try:
         GCP_MONITORING_AVAILABLE = True
     except ImportError:
         GCP_MONITORING_AVAILABLE = False
-        print("⚠️  Cloud Monitoring exporter non disponible, seules les traces seront exportées")
+        print("Cloud Monitoring exporter not available, only traces will be exported")
     
-    # Initialiser OpenTelemetry pour GCP (seulement si on est sur GCP)
+    # Initialize OpenTelemetry for GCP (only if on GCP)
     if os.getenv("GOOGLE_CLOUD_PROJECT"):
-        # Configurer le Resource avec les métadonnées du service
+        # Configure Resource with service metadata
         resource = Resource.create({
             "service.name": "ecommerce-classification-api",
             "service.version": "1.0.0",
         })
         
-        # Configurer Cloud Trace
+        # Configure Cloud Trace
         trace_provider = TracerProvider(resource=resource)
         cloud_trace_exporter = CloudTraceSpanExporter()
         trace_provider.add_span_processor(BatchSpanProcessor(cloud_trace_exporter))
         trace.set_tracer_provider(trace_provider)
-        print("✓ Cloud Trace configuré")
+        print("Cloud Trace configured")
         
-        # Configurer Cloud Monitoring (métriques) si disponible
+        # Configure Cloud Monitoring (metrics) if available
         if GCP_MONITORING_AVAILABLE:
             try:
                 metric_reader = PeriodicExportingMetricReader(
                     GcpMonitoringMetricsExporter(),
-                    export_interval_millis=60000  # Exporter toutes les 60 secondes
+                    export_interval_millis=60000  # Export every 60 seconds
                 )
                 metrics_provider = MeterProvider(
                     resource=resource,
                     metric_readers=[metric_reader]
                 )
                 metrics.set_meter_provider(metrics_provider)
-                print("✓ Cloud Monitoring configuré")
+                print("Cloud Monitoring configured")
             except Exception as e:
-                print(f"⚠️  Erreur lors de la configuration de Cloud Monitoring: {e}")
+                print(f"Error configuring Cloud Monitoring: {e}")
         
         OTEL_ENABLED = True
     else:
@@ -80,13 +80,13 @@ except ImportError as e:
     OTEL_ENABLED = False
     trace = None
     metrics = None
-    print(f"⚠️  OpenTelemetry non disponible: {e}")
+    print(f"OpenTelemetry not available: {e}")
 
 
-# ==================== MODÈLE ====================
+# ==================== MODEL ====================
 
 class ClassificationModel:
-    """Wrapper pour charger et utiliser le modèle de classification"""
+    """Wrapper for loading and using the classification model"""
     
     def __init__(self, model_path: Optional[Path] = None):
         self.model_path = model_path or Path(__file__).parent.parent / 'results' / 'classification' / 'flat_model.pkl'
@@ -97,11 +97,11 @@ class ClassificationModel:
         self.load_model()
     
     def load_model(self):
-        """Charge le modèle depuis le fichier pickle"""
+        """Load model from pickle file"""
         if not self.model_path.exists():
-            raise FileNotFoundError(f"Modèle non trouvé: {self.model_path}")
+            raise FileNotFoundError(f"Model not found: {self.model_path}")
         
-        print(f"Chargement du modèle depuis {self.model_path}...")
+        print(f"Loading model from {self.model_path}...")
         with open(self.model_path, 'rb') as f:
             model_data = pickle.load(f)
         
@@ -109,32 +109,32 @@ class ClassificationModel:
         self.label_encoder = model_data['label_encoder']
         self.cat_to_path = model_data.get('cat_to_path', {})
         
-        # Charger le modèle d'embeddings
+        # Load embedding model
         embedding_model_name = model_data.get('embedding_model_name', 'paraphrase-multilingual-MiniLM-L12-v2')
-        print(f"Chargement du modèle d'embeddings: {embedding_model_name}...")
+        print(f"Loading embedding model: {embedding_model_name}...")
         self.embedding_model = SentenceTransformer(embedding_model_name)
         
-        print("✓ Modèle chargé avec succès")
+        print("Model loaded successfully")
     
     def predict_single(self, title: str, description: str = ""):
-        """Prédit la catégorie pour un seul produit"""
+        """Predict category for a single product"""
         tracer = trace.get_tracer(__name__) if OTEL_ENABLED else None
         
-        # Créer le span principal si OpenTelemetry est activé
+        # Create main span if OpenTelemetry is enabled
         span_ctx = tracer.start_as_current_span("model.predict") if tracer else nullcontext()
         
         with span_ctx:
-            # Préparer le texte
+            # Prepare text
             text = f"{title} {description}".strip()
             
-            # Générer l'embedding (avec span)
+            # Generate embedding (with span)
             if tracer:
                 with tracer.start_as_current_span("model.embedding"):
                     embedding = self.embedding_model.encode([text], show_progress_bar=False)
             else:
                 embedding = self.embedding_model.encode([text], show_progress_bar=False)
             
-            # Prédire (avec span)
+            # Predict (with span)
             if tracer:
                 with tracer.start_as_current_span("model.classify"):
                     y_pred_encoded = self.classifier.predict(embedding)[0]
@@ -148,7 +148,7 @@ class ClassificationModel:
             confidence = float(np.max(y_proba))
             category_path = self.cat_to_path.get(y_pred, "N/A")
             
-            # Ajouter des attributs au span
+            # Add attributes to span
             if tracer:
                 span = trace.get_current_span()
                 if span:
@@ -162,42 +162,42 @@ class ClassificationModel:
             }
 
 
-# ==================== MÉTRIQUES ====================
+# ==================== METRICS ====================
 
-# 1. Latence (temps de réponse)
+# 1. Latency (response time)
 request_duration = Histogram(
     'api_request_duration_seconds',
-    'Temps de réponse des requêtes API',
+    'API request response time',
     ['method', 'endpoint', 'status']
 )
 
-# 2. Throughput (nombre de requêtes)
+# 2. Throughput (request count)
 requests_total = Counter(
     'api_requests_total',
-    'Nombre total de requêtes',
+    'Total number of requests',
     ['method', 'endpoint', 'status']
 )
 
-# 3. Taux d'erreur
+# 3. Error rate
 errors_total = Counter(
     'api_errors_total',
-    'Nombre total d\'erreurs',
+    'Total number of errors',
     ['method', 'endpoint', 'error_type']
 )
 
-# 4. Score de confiance moyen
+# 4. Average confidence score
 confidence_score_avg = Gauge(
     'api_confidence_score_average',
-    'Score de confiance moyen des prédictions'
+    'Average confidence score of predictions'
 )
 
-# 5. Temps d'inférence du modèle
+# 5. Model inference time
 inference_duration = Histogram(
     'api_inference_duration_seconds',
-    'Temps d\'inférence du modèle de classification'
+    'Model classification inference time'
 )
 
-# Compteur pour calculer la moyenne de confiance
+# Counter for calculating average confidence
 _confidence_sum = 0.0
 _confidence_count = 0
 
@@ -206,28 +206,28 @@ _confidence_count = 0
 
 app = FastAPI(
     title="E-commerce Classification API",
-    description="API de classification de produits e-commerce avec observabilité",
+    description="Product classification API with observability",
     version="1.0.0"
 )
 
-# Instrumenter FastAPI avec OpenTelemetry (si disponible)
+# Instrument FastAPI with OpenTelemetry (if available)
 if OTEL_ENABLED:
     FastAPIInstrumentor.instrument_app(app)
     RequestsInstrumentor().instrument()
 
-# Charger le modèle au démarrage
+# Load model at startup
 try:
     model = ClassificationModel()
 except Exception as e:
-    print(f"ERREUR: Impossible de charger le modèle: {e}")
+    print(f"ERROR: Unable to load model: {e}")
     model = None
 
 
-# ==================== MODÈLES PYDANTIC ====================
+# ==================== PYDANTIC MODELS ====================
 
 class ProductRequest(BaseModel):
-    title: str = Field(..., description="Titre du produit", min_length=1)
-    description: Optional[str] = Field(default="", description="Description du produit")
+    title: str = Field(..., description="Product title", min_length=1)
+    description: Optional[str] = Field(default="", description="Product description")
 
 
 class ClassificationResponse(BaseModel):
@@ -242,11 +242,11 @@ class HealthResponse(BaseModel):
     model_loaded: bool
 
 
-# ==================== MIDDLEWARE POUR MÉTRIQUES ====================
+# ==================== MIDDLEWARE FOR METRICS ====================
 
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
-    """Middleware pour collecter les métriques"""
+    """Middleware for collecting metrics"""
     start_time = time.time()
     method = request.method
     endpoint = request.url.path
@@ -256,14 +256,14 @@ async def metrics_middleware(request, call_next):
         status = response.status_code
         status_class = f"{status // 100}xx"
         
-        # Enregistrer la latence
+        # Record latency
         duration = time.time() - start_time
         request_duration.labels(method=method, endpoint=endpoint, status=status_class).observe(duration)
         
-        # Enregistrer le throughput
+        # Record throughput
         requests_total.labels(method=method, endpoint=endpoint, status=status_class).inc()
         
-        # Enregistrer les erreurs
+        # Record errors
         if status >= 400:
             error_type = "4xx" if status < 500 else "5xx"
             errors_total.labels(method=method, endpoint=endpoint, error_type=error_type).inc()
@@ -274,7 +274,7 @@ async def metrics_middleware(request, call_next):
         status = 500
         duration = time.time() - start_time
         
-        # Enregistrer l'erreur
+        # Record error
         errors_total.labels(method=method, endpoint=endpoint, error_type="exception").inc()
         request_duration.labels(method=method, endpoint=endpoint, status="5xx").observe(duration)
         requests_total.labels(method=method, endpoint=endpoint, status="5xx").inc()
@@ -287,36 +287,36 @@ async def metrics_middleware(request, call_next):
 @app.post("/classify", response_model=ClassificationResponse)
 async def classify_product(product: ProductRequest):
     """
-    Classifie un produit dans une catégorie
+    Classify a product into a category
     
-    - **title**: Titre du produit (requis)
-    - **description**: Description du produit (optionnel)
+    - **title**: Product title (required)
+    - **description**: Product description (optional)
     """
     if model is None:
-        raise HTTPException(status_code=503, detail="Modèle non chargé")
+        raise HTTPException(status_code=503, detail="Model not loaded")
     
     tracer = trace.get_tracer(__name__) if OTEL_ENABLED else None
     
     try:
-        # Mesurer le temps d'inférence
+        # Measure inference time
         inference_start = time.time()
         
-        # Prédire (le span sera créé dans predict_single)
+        # Predict (span will be created in predict_single)
         result = model.predict_single(product.title, product.description or "")
         
         inference_time = time.time() - inference_start
         
-        # Enregistrer le temps d'inférence
+        # Record inference time
         inference_duration.observe(inference_time)
         
-        # Mettre à jour la moyenne de confiance
+        # Update average confidence
         global _confidence_sum, _confidence_count
         _confidence_sum += result['confidence']
         _confidence_count += 1
         if _confidence_count > 0:
             confidence_score_avg.set(_confidence_sum / _confidence_count)
         
-        # Ajouter des attributs au span principal
+        # Add attributes to main span
         if tracer:
             span = trace.get_current_span()
             if span:
@@ -333,19 +333,19 @@ async def classify_product(product: ProductRequest):
     except Exception as e:
         errors_total.labels(method="POST", endpoint="/classify", error_type="prediction_error").inc()
         
-        # Enregistrer l'erreur dans le span
+        # Record error in span
         if tracer:
             span = trace.get_current_span()
             if span:
                 span.record_exception(e)
                 span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
         
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la classification: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Classification error: {str(e)}")
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Vérifie l'état de santé de l'API"""
+    """Check API health status"""
     return HealthResponse(
         status="healthy" if model is not None else "unhealthy",
         model_loaded=model is not None
@@ -354,7 +354,7 @@ async def health_check():
 
 @app.get("/metrics")
 async def metrics():
-    """Endpoint Prometheus pour les métriques"""
+    """Prometheus endpoint for metrics"""
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST
@@ -363,7 +363,7 @@ async def metrics():
 
 @app.get("/")
 async def root():
-    """Endpoint racine"""
+    """Root endpoint"""
     return {
         "service": "E-commerce Classification API",
         "version": "1.0.0",
@@ -374,4 +374,3 @@ async def root():
             "docs": "/docs"
         }
     }
-

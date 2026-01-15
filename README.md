@@ -1,32 +1,32 @@
-# Classification E-commerce
+# E-commerce Classification
 
-## Objectif
+## Objective
 
-Classification automatique de produits e-commerce dans des catégories feuilles à partir des informations disponibles (title, description, brand, color). Le projet commence par un audit complet de la taxonomie existante pour comprendre sa structure et identifier d'éventuelles incohérences, puis explore une approche de classification flat (baseline) avec identification des produits incertains pour validation humaine.
+Automatic classification of e-commerce products into leaf categories based on available information (title, description, brand, color). The project starts with a comprehensive audit of the existing taxonomy to understand its structure and identify potential inconsistencies, then explores a flat classification approach (baseline) with identification of uncertain products for human validation.
 
-**Pour une compréhension approfondie des choix stratégiques, résultats détaillés et analyses, consultez le fichier [SYNTHESE.md](SYNTHESE.md).**
+**For a detailed understanding of strategic choices, results and analyses, see the [SYNTHESIS.md](SYNTHESIS.md) file.**
 
-## Structure du Projet
+## Project Structure
 
 ```
 ClassificationEcommerce/
-├── data/                          # Données d'entrée (CSV)
+├── data/                          # Input data (CSV)
 │   ├── .gitkeep
-│   ├── trainset.csv              # Données d'entraînement (30,520 produits)
-│   └── testset.csv               # Données de test (7,631 produits)
+│   ├── trainset.csv              # Training data (30,520 products)
+│   └── testset.csv               # Test data (7,631 products)
 │
-├── src/                           # Code source
-│   ├── audit_taxonomy.py         # Étape 1 : Audit de la taxonomie
-│   ├── train.py                  # Étape 2 : Entraînement du classifieur
-│   ├── evaluate.py               # Étape 2 : Évaluation et analyses
-│   └── api.py                    # API FastAPI avec observabilité GCP
+├── src/                           # Source code
+│   ├── audit_taxonomy.py         # Step 1: Taxonomy audit
+│   ├── train.py                  # Step 2: Classifier training
+│   ├── evaluate.py               # Step 2: Evaluation and analyses
+│   └── api.py                    # FastAPI with GCP observability
 │
-├── results/                       # Résultats générés
-│   ├── audit/                    # Résultats de l'audit
+├── results/                       # Generated results
+│   ├── audit/                    # Audit results
 │   │   ├── category_names.json
 │   │   ├── low_coherence_categories.json
 │   │   └── high_coherence_categories.json
-│   └── classification/           # Résultats de la classification
+│   └── classification/           # Classification results
 │       ├── flat_model.pkl
 │       ├── certain_categories_analysis.json
 │       ├── uncertain_categories_analysis.json
@@ -34,116 +34,115 @@ ClassificationEcommerce/
 │
 ├── .cache/                        # Cache (embeddings, etc.)
 ├── requirements.txt
-├── README.md                      # Ce fichier
-└── SYNTHESE.md                    # Synthèse détaillée des approches et résultats
+├── README.md                      # This file
+└── SYNTHESIS.md                   # Detailed synthesis of approaches and results
 ```
 
 ## Installation
 
-1. **Créer un environnement virtuel** (recommandé) :
+1. **Create a virtual environment** (recommended):
 ```bash
 cd ./ClassificationEcommerce/
 python3 -m venv venv
 source venv/bin/activate 
 ```
 
-2. **Installer les dépendances** :
+2. **Install dependencies**:
 ```bash
 pip install -r requirements.txt
 ```
 
-**Important :** Placez vos fichiers `trainset.csv` et `testset.csv` dans le dossier `data/` avant d'exécuter les scripts.
+**Important:** Place your `trainset.csv` and `testset.csv` files in the `data/` folder before running the scripts.
 
-## Approche Méthodologique
+## Methodological Approach
 
-### Étape 1 : Audit de la Taxonomie
+### Step 1: Taxonomy Audit
 
-Avant toute classification, une analyse approfondie du jeu de données permet de :
-- Comprendre la structure hiérarchique (profondeur, nombre de catégories par niveau)
-- Détecter les incohérences structurelles dans les `category_path`
-- Évaluer la cohérence sémantique des produits au sein de chaque catégorie
+Before any classification, a thorough analysis of the dataset allows to:
+- Understand the hierarchical structure (depth, number of categories per level)
+- Detect structural inconsistencies in `category_path`
+- Evaluate semantic coherence of products within each category
 
-**Exécution :**
+**Execution:**
 ```bash
 python3 src/audit_taxonomy.py
 ```
 
-**Résultats :**
-- 100 catégories feuilles identifiées
-- Profondeur variable : 3 à 8 niveaux (médiane : 6)
-- Aucune incohérence structurelle détectée
-- 32 catégories avec faible cohérence sémantique (< 0.4)
-- 68 catégories avec haute cohérence sémantique (≥ 0.4)
-- Génération de noms de catégories à partir des mots-clés fréquents
+**Results:**
+- 100 leaf categories identified
+- Variable depth: 3 to 8 levels (median: 6)
+- No structural inconsistencies detected
+- 32 categories with low semantic coherence (< 0.4)
+- 68 categories with high semantic coherence (>= 0.4)
+- Category names generated from frequent keywords
 
-**Fichiers générés (dans `results/audit/`) :**
-- `category_names.json` : Noms générés pour chaque catégorie avec exemples
-- `low_coherence_categories.json` : Catégories à faible cohérence sémantique
-- `high_coherence_categories.json` : Catégories à haute cohérence sémantique
+**Generated files (in `results/audit/`):**
+- `category_names.json`: Generated names for each category with examples
+- `low_coherence_categories.json`: Categories with low semantic coherence
+- `high_coherence_categories.json`: Categories with high semantic coherence
 
-### Étape 2 : Classification Flat (Baseline)
+### Step 2: Flat Classification (Baseline)
 
-**Principe :** Prédiction directe de la catégorie feuille parmi les 100 classes, avec identification des produits incertains basée sur les scores de confiance.
+**Principle:** Direct prediction of the leaf category among 100 classes, with identification of uncertain products based on confidence scores.
 
-**Architecture :**
-- Embeddings : Modèle multilingue `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions)
-- Classifieur : Logistic Regression
-- Features : Concaténation de title + description
+**Architecture:**
+- Embeddings: Multilingual model `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions)
+- Classifier: Logistic Regression
+- Features: Concatenation of title + description
 
-**Exécution :**
+**Execution:**
 ```bash
-python3 src/train.py      # Entraînement
-python3 src/evaluate.py   # Évaluation et analyses
+python3 src/train.py      # Training
+python3 src/evaluate.py   # Evaluation and analyses
 ```
 
-**Résultats :**
-- Accuracy : 77.47% sur le test set
-- 75.5% des produits avec confiance ≥ 0.5 (certains)
-- 24.5% des produits avec confiance < 0.5 (incertains, nécessitent validation humaine)
+**Results:**
+- Accuracy: 77.47% on test set
+- 75.5% of products with confidence >= 0.5 (certain)
+- 24.5% of products with confidence < 0.5 (uncertain, require human validation)
 
-**Fichiers générés (dans `results/classification/`) :**
-- `flat_model.pkl` : Modèle entraîné sauvegardé
-- `certain_categories_analysis.json` : Top 10 catégories avec produits certains
-- `uncertain_categories_analysis.json` : Top 10 catégories problématiques
-- `confusion_patterns.json` : Top 10 patterns de confusion entre catégories
+**Generated files (in `results/classification/`):**
+- `flat_model.pkl`: Saved trained model
+- `certain_categories_analysis.json`: Top 10 categories with certain products
+- `uncertain_categories_analysis.json`: Top 10 problematic categories
+- `confusion_patterns.json`: Top 10 confusion patterns between categories
 
-### Étape 3 : API avec Observabilité (Optionnel)
+### Step 3: API with Observability (Optional)
 
-**Principe :** API REST pour la classification en production avec instrumentation OpenTelemetry pour Cloud Monitoring et Cloud Trace.
+**Principle:** REST API for production classification with OpenTelemetry instrumentation for Cloud Monitoring and Cloud Trace.
 
-**Exécution locale :**
+**Local execution:**
 ```bash
 ./start_api.sh
 ```
 
-L'API sera accessible sur `http://localhost:8000` avec :
-- `/classify` : Endpoint de classification (POST)
-- `/health` : Health check
-- `/metrics` : Métriques Prometheus
-- `/docs` : Documentation Swagger
+The API will be accessible at `http://localhost:8000` with:
+- `/classify`: Classification endpoint (POST)
+- `/health`: Health check
+- `/metrics`: Prometheus metrics
+- `/docs`: Swagger documentation
 
-**Déploiement sur Cloud Run :**
+**Cloud Run deployment:**
 ```bash
 export GOOGLE_CLOUD_PROJECT=your-project-id
 ./deploy_cloud_run.sh
 ```
 
-**Observabilité :**
-- Métriques exportées vers Cloud Monitoring (latence, throughput, erreurs, confiance)
-- Traces exportées vers Cloud Trace (spans détaillés pour embedding, classification)
-- Dashboards et alertes configurables (voir [CLOUD_MONITORING.md](CLOUD_MONITORING.md))
+**Observability:**
+- Metrics exported to Cloud Monitoring (latency, throughput, errors, confidence)
+- Traces exported to Cloud Trace (detailed spans for embedding, classification)
+- Configurable dashboards and alerts (see [CLOUD_MONITORING.md](CLOUD_MONITORING.md))
 
-## Technologies Utilisées
+## Technologies Used
 
 - **Python 3**
-- **scikit-learn** : Classification (Logistic Regression)
-- **sentence-transformers** : Embeddings multilingues (FR/DE/EN)
-- **pandas** : Manipulation de données
-- **numpy** : Calculs numériques
-- **FastAPI** : API REST (optionnel)
-- **OpenTelemetry** : Observabilité (Cloud Monitoring, Cloud Trace)
+- **scikit-learn**: Classification (Logistic Regression)
+- **sentence-transformers**: Multilingual embeddings (FR/DE/EN)
+- **pandas**: Data manipulation
+- **numpy**: Numerical computations
+- **FastAPI**: REST API (optional)
+- **OpenTelemetry**: Observability (Cloud Monitoring, Cloud Trace)
 
-## Documentation Complémentaire
+## Additional Documentation
 
-Pour une analyse détaillée des choix stratégiques, des résultats complets, des exemples d'erreurs et des axes d'amélioration, consultez le fichier **[SYNTHESE.md](SYNTHESE.md)**.
-
+For detailed analysis of strategic choices, complete results, error examples and improvement axes, see the **[SYNTHESIS.md](SYNTHESIS.md)** file.

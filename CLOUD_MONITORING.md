@@ -1,152 +1,151 @@
-# Guide Cloud Monitoring et Observabilité
+# Cloud Monitoring and Observability Guide
 
-Ce guide explique comment utiliser Cloud Monitoring et Cloud Trace pour observer l'API de classification.
+This guide explains how to use Cloud Monitoring and Cloud Trace to observe the classification API.
 
-## Prérequis
+## Prerequisites
 
-1. **Projet GCP configuré** avec les APIs suivantes activées:
+1. **GCP Project configured** with the following APIs enabled:
    - Cloud Run API
    - Cloud Monitoring API
    - Cloud Trace API
    - Cloud Build API
 
-2. **Authentification** :
+2. **Authentication**:
    ```bash
    gcloud auth login
    gcloud config set project YOUR_PROJECT_ID
    ```
 
-3. **Permissions** : Le service Cloud Run doit avoir les permissions:
-   - `roles/cloudtrace.agent` (pour Cloud Trace)
-   - `roles/monitoring.metricWriter` (pour Cloud Monitoring)
+3. **Permissions**: The Cloud Run service must have permissions:
+   - `roles/cloudtrace.agent` (for Cloud Trace)
+   - `roles/monitoring.metricWriter` (for Cloud Monitoring)
 
-## Déploiement
+## Deployment
 
-1. **Déployer l'API sur Cloud Run** :
+1. **Deploy the API on Cloud Run**:
    ```bash
    chmod +x deploy_cloud_run.sh
    export GOOGLE_CLOUD_PROJECT=your-project-id
    ./deploy_cloud_run.sh
    ```
 
-2. **Vérifier que l'instrumentation fonctionne** :
-   - L'API détecte automatiquement qu'elle tourne sur GCP via la variable `GOOGLE_CLOUD_PROJECT`
-   - Les métriques sont exportées toutes les 60 secondes
-   - Les traces sont envoyées en batch
+2. **Verify instrumentation is working**:
+   - The API automatically detects running on GCP via the `GOOGLE_CLOUD_PROJECT` variable
+   - Metrics are exported every 60 seconds
+   - Traces are sent in batches
 
-## Dashboard Cloud Monitoring
+## Cloud Monitoring Dashboard
 
-### Créer un dashboard personnalisé
+### Create a Custom Dashboard
 
-1. **Accéder à Cloud Monitoring** :
-   - Console GCP → Monitoring → Dashboards
-   - Cliquer sur "Create Dashboard"
+1. **Access Cloud Monitoring**:
+   - GCP Console → Monitoring → Dashboards
+   - Click "Create Dashboard"
 
-2. **Métriques disponibles** :
+2. **Available Metrics**:
 
-   #### Latence (Request Duration)
-   - **Métrique** : `custom.googleapis.com/opentelemetry/api_request_duration_seconds`
-   - **Graphique recommandé** : Line chart avec percentiles (p50, p95, p99)
-   - **Filtres** : `endpoint="/classify"`
+   #### Latency (Request Duration)
+   - **Metric**: `custom.googleapis.com/opentelemetry/api_request_duration_seconds`
+   - **Recommended chart**: Line chart with percentiles (p50, p95, p99)
+   - **Filters**: `endpoint="/classify"`
 
    #### Throughput (Request Rate)
-   - **Métrique** : `custom.googleapis.com/opentelemetry/api_requests_total`
-   - **Graphique recommandé** : Line chart (rate par seconde)
-   - **Filtres** : `endpoint="/classify"`, `status="2xx"`
+   - **Metric**: `custom.googleapis.com/opentelemetry/api_requests_total`
+   - **Recommended chart**: Line chart (rate per second)
+   - **Filters**: `endpoint="/classify"`, `status="2xx"`
 
-   #### Taux d'erreur
-   - **Métrique** : `custom.googleapis.com/opentelemetry/api_errors_total`
-   - **Graphique recommandé** : Line chart
-   - **Filtres** : `error_type="5xx"` ou `error_type="4xx"`
+   #### Error Rate
+   - **Metric**: `custom.googleapis.com/opentelemetry/api_errors_total`
+   - **Recommended chart**: Line chart
+   - **Filters**: `error_type="5xx"` or `error_type="4xx"`
 
-   #### Score de confiance
-   - **Métrique** : `custom.googleapis.com/opentelemetry/api_confidence_score_average`
-   - **Graphique recommandé** : Line chart
-   - **Seuil d'alerte** : < 0.7
+   #### Confidence Score
+   - **Metric**: `custom.googleapis.com/opentelemetry/api_confidence_score_average`
+   - **Recommended chart**: Line chart
+   - **Alert threshold**: < 0.7
 
-   #### Temps d'inférence
-   - **Métrique** : `custom.googleapis.com/opentelemetry/api_inference_duration_seconds`
-   - **Graphique recommandé** : Line chart avec percentiles
+   #### Inference Time
+   - **Metric**: `custom.googleapis.com/opentelemetry/api_inference_duration_seconds`
+   - **Recommended chart**: Line chart with percentiles
 
-### Dashboard recommandé (5 widgets)
+### Recommended Dashboard (5 widgets)
 
-1. **Latence p95** (ligne rouge à 500ms)
-2. **Throughput** (requêtes/seconde)
-3. **Taux d'erreur** (ligne rouge à 1%)
-4. **Score de confiance moyen**
-5. **Temps d'inférence p95**
+1. **Latency p95** (red line at 500ms)
+2. **Throughput** (requests/second)
+3. **Error rate** (red line at 1%)
+4. **Average confidence score**
+5. **Inference time p95**
 
 ## Cloud Trace
 
-### Visualiser les traces
+### View Traces
 
-1. **Accéder à Cloud Trace** :
-   - Console GCP → Trace → Trace List
+1. **Access Cloud Trace**:
+   - GCP Console → Trace → Trace List
 
-2. **Filtrer les traces** :
-   - Service : `ecommerce-classification-api`
-   - Endpoint : `/classify`
+2. **Filter traces**:
+   - Service: `ecommerce-classification-api`
+   - Endpoint: `/classify`
 
-3. **Spans disponibles** :
-   - `POST /classify` : Span principal de la requête
-   - `model.predict` : Span pour la prédiction complète
-   - `model.embedding` : Span pour la génération d'embedding
-   - `model.classify` : Span pour la classification
+3. **Available Spans**:
+   - `POST /classify`: Main request span
+   - `model.predict`: Span for complete prediction
+   - `model.embedding`: Span for embedding generation
+   - `model.classify`: Span for classification
 
-4. **Analyser les performances** :
-   - Identifier les requêtes lentes (> 1s)
-   - Voir quelle étape prend le plus de temps (embedding vs classification)
-   - Analyser les erreurs avec les stack traces
+4. **Analyze Performance**:
+   - Identify slow requests (> 1s)
+   - See which step takes the most time (embedding vs classification)
+   - Analyze errors with stack traces
 
-## Alertes
+## Alerts
 
-### Créer des alertes
+### Create Alerts
 
-1. **Accéder aux Alertes** :
-   - Console GCP → Monitoring → Alerting → Create Policy
+1. **Access Alerts**:
+   - GCP Console → Monitoring → Alerting → Create Policy
 
-2. **Alertes recommandées** :
+2. **Recommended Alerts**:
 
-   #### Latence élevée
-   - **Condition** : `api_request_duration_seconds` p95 > 500ms
-   - **Durée** : 5 minutes
-   - **Notification** : Email ou Slack
+   #### High Latency
+   - **Condition**: `api_request_duration_seconds` p95 > 500ms
+   - **Duration**: 5 minutes
+   - **Notification**: Email or Slack
 
-   #### Taux d'erreur élevé
-   - **Condition** : `api_errors_total` rate > 1% des requêtes
-   - **Durée** : 5 minutes
+   #### High Error Rate
+   - **Condition**: `api_errors_total` rate > 1% of requests
+   - **Duration**: 5 minutes
 
-   #### Score de confiance faible
-   - **Condition** : `api_confidence_score_average` < 0.7
-   - **Durée** : 10 minutes
+   #### Low Confidence Score
+   - **Condition**: `api_confidence_score_average` < 0.7
+   - **Duration**: 10 minutes
 
-   #### Modèle non disponible
-   - **Condition** : Health check `/health` retourne `unhealthy`
-   - **Durée** : 1 minute
+   #### Model Unavailable
+   - **Condition**: Health check `/health` returns `unhealthy`
+   - **Duration**: 1 minute
 
-## Métriques Prometheus (local)
+## Prometheus Metrics (local)
 
-Pour le développement local, les métriques Prometheus restent disponibles sur `/metrics` :
-- Compatible avec Grafana
-- Format standard Prometheus
+For local development, Prometheus metrics remain available at `/metrics`:
+- Compatible with Grafana
+- Standard Prometheus format
 
 ## Troubleshooting
 
-### Les métriques n'apparaissent pas
+### Metrics Not Appearing
 
-1. Vérifier que `GOOGLE_CLOUD_PROJECT` est défini dans Cloud Run
-2. Vérifier les permissions IAM du service
-3. Vérifier les logs Cloud Run pour les erreurs d'export
+1. Verify `GOOGLE_CLOUD_PROJECT` is defined in Cloud Run
+2. Check service IAM permissions
+3. Check Cloud Run logs for export errors
 
-### Les traces n'apparaissent pas
+### Traces Not Appearing
 
-1. Vérifier que Cloud Trace API est activée
-2. Vérifier les permissions `roles/cloudtrace.agent`
-3. Attendre quelques minutes (traces envoyées en batch)
+1. Verify Cloud Trace API is enabled
+2. Check `roles/cloudtrace.agent` permissions
+3. Wait a few minutes (traces sent in batches)
 
 ### Performance
 
-- Les métriques sont exportées toutes les 60 secondes (configurable)
-- Les traces sont envoyées en batch (latence ~10-30 secondes)
-- Impact minimal sur les performances de l'API
-
+- Metrics are exported every 60 seconds (configurable)
+- Traces are sent in batches (latency ~10-30 seconds)
+- Minimal impact on API performance

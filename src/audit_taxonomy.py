@@ -1,10 +1,10 @@
 """
-Étape 1 - Audit de la taxonomie existante
+Step 1 - Audit of the existing taxonomy
 
-Ce script analyse le jeu de données d'entraînement pour :
-1. Comprendre la structure de la taxonomie (profondeur, nombre de catégories par niveau)
-2. Détecter des incohérences structurelles dans les category_path
-3. Évaluer la cohérence sémantique des produits au sein de chaque catégorie
+This script analyzes the training dataset to:
+1. Understand the taxonomy structure (depth, number of categories per level)
+2. Detect structural inconsistencies in category_path
+3. Evaluate semantic coherence of products within each category
 """
 
 import pandas as pd
@@ -17,26 +17,26 @@ import warnings
 from tqdm import tqdm
 warnings.filterwarnings('ignore')
 
-# Pour les embeddings sémantiques
+# For semantic embeddings
 try:
     from sentence_transformers import SentenceTransformer
     EMBEDDINGS_AVAILABLE = True
 except ImportError:
     EMBEDDINGS_AVAILABLE = False
-    print("Sentence-transformers non installé. L'analyse sémantique sera limitée.")
+    print("Sentence-transformers not installed. Semantic analysis will be limited.")
 
 
 class TaxonomyAuditor:
-    """Auditeur de taxonomie pour produits e-commerce"""
+    """Taxonomy auditor for e-commerce products"""
     
     def __init__(self, data_path, sample_size=None):
         """
         Parameters:
         -----------
         data_path : str
-            Chemin vers le fichier CSV d'entraînement
+            Path to the training CSV file
         sample_size : int, optional
-            Nombre d'échantillons à utiliser pour l'analyse sémantique (None = tout)
+            Number of samples for semantic analysis (None = all)
         """
         self.data_path = data_path
         self.sample_size = sample_size
@@ -44,35 +44,35 @@ class TaxonomyAuditor:
         self.embedding_model = None
         
     def load_data(self):
-        """Charge les données d'entraînement"""
-        print("Chargement des données...")
+        """Load training data"""
+        print("Loading data...")
         self.df = pd.read_csv(self.data_path)
-        print(f"   ✓ {len(self.df):,} produits chargés")
+        print(f"   {len(self.df):,} products loaded")
         return self.df
     
     def analyze_structure(self):
-        """Analyse la structure de la taxonomie"""
+        """Analyze taxonomy structure"""
         print("\n" + "="*60)
-        print("1 ANALYSE DE LA STRUCTURE DE LA TAXONOMIE")
+        print("1 TAXONOMY STRUCTURE ANALYSIS")
         print("="*60)
         
-        # Profondeur des chemins
+        # Path depth
         self.df['path_depth'] = self.df['category_path'].str.count('/') + 1
         depths = self.df['path_depth'].value_counts().sort_index()
         
-        print(f"\nProfondeur de la taxonomie:")
-        print(f"   Profondeur minimale: {depths.index.min()}")
-        print(f"   Profondeur maximale: {depths.index.max()}")
-        print(f"   Profondeur moyenne: {self.df['path_depth'].mean():.2f}")
-        print(f"   Profondeur médiane: {self.df['path_depth'].median():.0f}")
+        print(f"\nTaxonomy depth:")
+        print(f"   Minimum depth: {depths.index.min()}")
+        print(f"   Maximum depth: {depths.index.max()}")
+        print(f"   Average depth: {self.df['path_depth'].mean():.2f}")
+        print(f"   Median depth: {self.df['path_depth'].median():.0f}")
         
-        print(f"\nDistribution des profondeurs:")
+        print(f"\nDepth distribution:")
         for depth, count in depths.items():
             pct = (count / len(self.df)) * 100
-            print(f"   Niveau {depth}: {count:,} produits ({pct:.1f}%)")
+            print(f"   Level {depth}: {count:,} products ({pct:.1f}%)")
         
-        # Nombre de catégories uniques par niveau
-        print(f"\nNombre de catégories uniques par niveau:")
+        # Unique categories per level
+        print(f"\nUnique categories per level:")
         max_depth = int(self.df['path_depth'].max())
         for level in range(1, max_depth + 1):
             categories_at_level = set()
@@ -80,36 +80,36 @@ class TaxonomyAuditor:
                 parts = path.split('/')
                 if len(parts) >= level:
                     categories_at_level.add(parts[level - 1])
-            print(f"   Niveau {level}: {len(categories_at_level):,} catégories uniques")
+            print(f"   Level {level}: {len(categories_at_level):,} unique categories")
         
-        # Catégories feuilles
+        # Leaf categories
         unique_leaf_categories = self.df['category_id'].nunique()
-        print(f"\nCatégories feuilles (category_id):")
-        print(f"   {unique_leaf_categories:,} catégories feuilles uniques")
-        print(f"   {len(self.df):,} produits au total")
+        print(f"\nLeaf categories (category_id):")
+        print(f"   {unique_leaf_categories:,} unique leaf categories")
+        print(f"   {len(self.df):,} total products")
         avg_products_per_category = len(self.df) / unique_leaf_categories
-        print(f"   Moyenne: {avg_products_per_category:.1f} produits par catégorie")
+        print(f"   Average: {avg_products_per_category:.1f} products per category")
         
-        # Distribution des produits par catégorie
+        # Products distribution per category
         category_counts = self.df['category_id'].value_counts()
-        print(f"\nDistribution des produits par catégorie:")
-        print(f"   Catégorie la plus fréquente: {category_counts.max():,} produits")
-        print(f"   Catégorie la moins fréquente: {category_counts.min():,} produits")
-        print(f"   Médiane: {category_counts.median():.0f} produits")
+        print(f"\nProducts distribution per category:")
+        print(f"   Most frequent category: {category_counts.max():,} products")
+        print(f"   Least frequent category: {category_counts.min():,} products")
+        print(f"   Median: {category_counts.median():.0f} products")
         
-        # Top 5 catégories les plus fréquentes
-        print(f"\nTop 5 catégories les plus fréquentes:")
+        # Top 5 most frequent categories
+        print(f"\nTop 5 most frequent categories:")
         top_5 = category_counts.head(5)
         for cat_id, count in top_5.items():
-            print(f"   {cat_id}: {count:,} produits")
+            print(f"   {cat_id}: {count:,} products")
         
-        # Bottom 5 catégories les moins fréquentes
-        print(f"\nTop 5 catégories les moins fréquentes:")
+        # Bottom 5 least frequent categories
+        print(f"\nTop 5 least frequent categories:")
         bottom_5 = category_counts.tail(5)
         for cat_id, count in bottom_5.items():
-            print(f"   {cat_id}: {count:,} produits")
+            print(f"   {cat_id}: {count:,} products")
         
-        # Générer les noms de catégories
+        # Generate category names
         category_names = self.generate_category_names()
         
         return {
@@ -121,10 +121,10 @@ class TaxonomyAuditor:
         }
     
     def generate_category_names(self):
-        """Génère des noms simples pour chaque catégorie basés sur les mots-clés fréquents"""
-        print("\nGénération des noms de catégories...")
+        """Generate simple names for each category based on frequent keywords"""
+        print("\nGenerating category names...")
         
-        # Stopwords simples (FR/DE/EN)
+        # Simple stopwords (FR/DE/EN)
         stopwords = {'le', 'la', 'les', 'de', 'du', 'des', 'et', 'ou', 'pour', 'avec', 'sans', 
                     'der', 'die', 'das', 'und', 'oder', 'für', 'mit', 'ohne',
                     'the', 'a', 'an', 'and', 'or', 'for', 'with', 'without',
@@ -136,21 +136,21 @@ class TaxonomyAuditor:
             cat_products = self.df[self.df['category_id'] == cat_id]
             titles = cat_products['title'].fillna('').astype(str).tolist()
             
-            # Extraire les mots (min 3 caractères, alphanumériques)
+            # Extract words (min 3 characters, alphanumeric)
             words = []
             for title in titles:
                 title_words = re.findall(r'\b[a-zA-ZÀ-ÿ]{3,}\b', title.lower())
                 words.extend([w for w in title_words if w not in stopwords])
             
-            # Top 2-3 mots les plus fréquents
+            # Top 2-3 most frequent words
             if words:
                 word_counts = Counter(words)
                 top_words = [word for word, _ in word_counts.most_common(3)]
                 category_name = ' '.join(top_words).title()
             else:
-                category_name = "Catégorie inconnue"
+                category_name = "Unknown Category"
             
-            # Exemples de titres (max 5)
+            # Example titles (max 5)
             example_titles = [t[:80] for t in titles[:5] if t.strip()]
             
             category_data[cat_id] = {
@@ -158,19 +158,19 @@ class TaxonomyAuditor:
                 'example_titles': example_titles
             }
         
-        # Sauvegarder
+        # Save
         output_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(category_data, f, indent=2, ensure_ascii=False)
         
-        print(f"   ✓ {len(category_data)} noms générés")
-        print(f"Sauvegardés dans: {output_path}")
+        print(f"   {len(category_data)} names generated")
+        print(f"Saved to: {output_path}")
         
         return category_data
     
     def load_category_names(self):
-        """Charge les noms de catégories depuis category_names.json"""
+        """Load category names from category_names.json"""
         names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
         if names_path.exists():
             with open(names_path, 'r', encoding='utf-8') as f:
@@ -178,9 +178,9 @@ class TaxonomyAuditor:
         return {}
     
     def detect_inconsistencies(self):
-        """Détecte les incohérences structurelles dans les category_path"""
+        """Detect structural inconsistencies in category_path"""
         print("\n" + "="*60)
-        print("2 DÉTECTION D'INCOHÉRENCES STRUCTURELLES")
+        print("2 STRUCTURAL INCONSISTENCY DETECTION")
         print("="*60)
         
         inconsistencies = {
@@ -189,8 +189,8 @@ class TaxonomyAuditor:
             'invalid_paths': []
         }
         
-        # Vérifier que category_id correspond au dernier élément du path
-        print("\nVérification de cohérence category_id / category_path...")
+        # Check category_id matches last path element
+        print("\nVerifying category_id / category_path consistency...")
         mismatches = 0
         for idx, row in self.df.iterrows():
             path_parts = row['category_path'].split('/')
@@ -205,29 +205,29 @@ class TaxonomyAuditor:
                 })
         
         if mismatches > 0:
-            print(f"{mismatches:,} incohérences détectées (category_id ≠ dernier élément du path)")
-            print(f"   Exemples (premiers 5):")
+            print(f"{mismatches:,} inconsistencies detected (category_id != last path element)")
+            print(f"   Examples (first 5):")
             for inc in inconsistencies['category_id_mismatch'][:5]:
-                print(f"      - Product: {inc['product_id'][:8]}... | category_id: {inc['category_id']} | path fin: {inc['last_path_id']}")
+                print(f"      - Product: {inc['product_id'][:8]}... | category_id: {inc['category_id']} | path end: {inc['last_path_id']}")
         else:
-            print(f"   ✓ Aucune incohérence détectée")
+            print(f"   No inconsistencies detected")
         
-        # Vérifier les paths vides ou invalides
-        print("\nVérification des paths vides ou invalides...")
+        # Check empty or invalid paths
+        print("\nChecking for empty or invalid paths...")
         empty_paths = self.df[self.df['category_path'].isna() | (self.df['category_path'] == '')]
         if len(empty_paths) > 0:
-            print(f"{len(empty_paths):,} produits avec path vide")
+            print(f"{len(empty_paths):,} products with empty path")
             inconsistencies['empty_paths'] = empty_paths['product_id'].tolist()
         else:
-            print(f"   ✓ Aucun path vide")
+            print(f"   No empty paths")
         
-        # Vérifier les paths avec des IDs invalides (format hexadécimal attendu)
-        print("\nVérification du format des IDs dans les paths...")
+        # Check ID format in paths (hexadecimal expected)
+        print("\nVerifying ID format in paths...")
         invalid_format = 0
         for idx, row in self.df.iterrows():
             path_parts = row['category_path'].split('/')
             for part in path_parts:
-                # Vérifier que c'est un hexadécimal de 8 caractères
+                # Check if 8-character hexadecimal
                 if len(part) != 8 or not all(c in '0123456789abcdef' for c in part.lower()):
                     invalid_format += 1
                     inconsistencies['invalid_paths'].append({
@@ -238,12 +238,12 @@ class TaxonomyAuditor:
                     break
         
         if invalid_format > 0:
-            print(f"{invalid_format:,} paths avec format d'ID invalide")
+            print(f"{invalid_format:,} paths with invalid ID format")
         else:
-            print(f"   ✓ Tous les IDs ont un format valide (8 caractères hex)")
+            print(f"   All IDs have valid format (8-character hex)")
         
-        # Vérifier les chemins avec des doublons consécutifs
-        print("\nVérification des doublons consécutifs dans les paths...")
+        # Check consecutive duplicates in paths
+        print("\nChecking for consecutive duplicates in paths...")
         consecutive_duplicates = 0
         for idx, row in self.df.iterrows():
             path_parts = row['category_path'].split('/')
@@ -253,39 +253,39 @@ class TaxonomyAuditor:
                     break
         
         if consecutive_duplicates > 0:
-            print(f"{consecutive_duplicates:,} paths avec doublons consécutifs")
+            print(f"{consecutive_duplicates:,} paths with consecutive duplicates")
         else:
-            print(f"   ✓ Aucun doublon consécutif")
+            print(f"   No consecutive duplicates")
         
         return inconsistencies
     
     def evaluate_semantic_coherence(self, threshold=0.4, min_products=10):
-        """Analyse sémantique : évalue la cohérence et sauvegarde les catégories problématiques et performantes"""
+        """Semantic analysis: evaluate coherence and save problematic/performant categories"""
         print("\n" + "="*60)
-        print("3 ÉVALUATION DE LA COHÉRENCE SÉMANTIQUE")
+        print("3 SEMANTIC COHERENCE EVALUATION")
         print("="*60)
         
         if not EMBEDDINGS_AVAILABLE:
-            print("\nSentence-transformers non disponible.")
+            print("\nSentence-transformers not available.")
             return None
         
-        print("\nChargement du modèle d'embeddings...")
+        print("\nLoading embedding model...")
         self.embedding_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
         
-        # Charger les noms de catégories
+        # Load category names
         category_names = self.load_category_names()
         
-        # Analyser toutes les catégories avec suffisamment de produits
+        # Analyze categories with enough products
         category_counts = self.df['category_id'].value_counts()
         valid_categories = category_counts[category_counts >= min_products].index
         
-        print(f"\nAnalyse de {len(valid_categories)} catégories...")
+        print(f"\nAnalyzing {len(valid_categories)} categories...")
         
         low_coherence_data = []
         high_coherence_data = []
         texts_combined = (self.df['title'].fillna('') + ' ' + self.df['description'].fillna('')).str.strip()
         
-        for cat_id in tqdm(valid_categories, desc="Analyse sémantique"):
+        for cat_id in tqdm(valid_categories, desc="Semantic analysis"):
             cat_products = self.df[self.df['category_id'] == cat_id]
             if len(cat_products) > 100:
                 cat_products = cat_products.sample(n=100, random_state=42)
@@ -293,14 +293,14 @@ class TaxonomyAuditor:
             texts = texts_combined[cat_products.index].tolist()
             embeddings = self.embedding_model.encode(texts, show_progress_bar=False, batch_size=128)
             
-            # Distance moyenne intra-classe
+            # Average intra-class distance
             from sklearn.metrics.pairwise import cosine_distances
             distances = cosine_distances(embeddings)
             np.fill_diagonal(distances, np.nan)
             avg_distance = np.nanmean(distances)
             coherence_score = 1 - avg_distance
             
-            # Récupérer quelques exemples de titres
+            # Get example titles
             example_titles = [
                 str(title)[:80] for title in cat_products['title'].head(5).fillna('')
                 if str(title).strip()
@@ -320,11 +320,11 @@ class TaxonomyAuditor:
             else:
                 high_coherence_data.append(category_info)
         
-        # Trier : low par score croissant, high par score décroissant
+        # Sort: low by ascending score, high by descending score
         low_coherence_data.sort(key=lambda x: x['coherence_score'])
         high_coherence_data.sort(key=lambda x: x['coherence_score'], reverse=True)
         
-        # Sauvegarder low_coherence_categories.json
+        # Save low_coherence_categories.json
         output_path_low = Path(__file__).parent.parent / 'results' / 'audit' / 'low_coherence_categories.json'
         output_path_low.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path_low, 'w', encoding='utf-8') as f:
@@ -334,7 +334,7 @@ class TaxonomyAuditor:
                 'categories': low_coherence_data
             }, f, indent=2, ensure_ascii=False)
         
-        # Sauvegarder high_coherence_categories.json
+        # Save high_coherence_categories.json
         output_path_high = Path(__file__).parent.parent / 'results' / 'audit' / 'high_coherence_categories.json'
         with open(output_path_high, 'w', encoding='utf-8') as f:
             json.dump({
@@ -343,65 +343,65 @@ class TaxonomyAuditor:
                 'categories': high_coherence_data
             }, f, indent=2, ensure_ascii=False)
         
-        print(f"\n{len(low_coherence_data)} catégories à faible cohérence sauvegardées")
+        print(f"\n{len(low_coherence_data)} low coherence categories saved")
         if low_coherence_data:
             print(f"   Top 3: {', '.join([c['category_id'] for c in low_coherence_data[:3]])}")
         
-        print(f"\n{len(high_coherence_data)} catégories à haute cohérence sauvegardées")
+        print(f"\n{len(high_coherence_data)} high coherence categories saved")
         if high_coherence_data:
             print(f"   Top 3: {', '.join([c['category_id'] for c in high_coherence_data[:3]])}")
         
         return low_coherence_data, high_coherence_data
     
     def check_train_test_distribution(self, test_path):
-        """Vérifie la cohérence des distributions train/test"""
+        """Check train/test distribution consistency"""
         print("\n" + "="*60)
-        print("4 VÉRIFICATION DISTRIBUTION TRAIN/TEST")
+        print("4 TRAIN/TEST DISTRIBUTION CHECK")
         print("="*60)
         
         df_test = pd.read_csv(test_path)
         
-        # Calculer les proportions par catégorie
+        # Calculate proportions per category
         train_props = self.df['category_id'].value_counts(normalize=True).sort_index()
         test_props = df_test['category_id'].value_counts(normalize=True).sort_index()
         
-        # Vérifier les catégories manquantes
+        # Check missing categories
         missing_in_test = set(train_props.index) - set(test_props.index)
         missing_in_train = set(test_props.index) - set(train_props.index)
         
         if missing_in_train:
-            print(f"\n{len(missing_in_train)} catégories du test absentes du train")
+            print(f"\n{len(missing_in_train)} test categories missing from train")
         
-        # Aligner les index pour la corrélation
+        # Align indexes for correlation
         common_cats = sorted(set(train_props.index) & set(test_props.index))
         train_aligned = train_props[common_cats]
         test_aligned = test_props[common_cats]
         
-        # Corrélation et différence moyenne
+        # Correlation and average difference
         correlation = np.corrcoef(train_aligned, test_aligned)[0, 1]
         avg_diff = np.mean(np.abs(train_aligned - test_aligned)) * 100
         
-        print(f"\nDistribution Train vs Test:")
-        print(f"   ✓ Corrélation: {correlation:.3f}")
-        print(f"   ✓ Différence moyenne: {avg_diff:.2f} points")
+        print(f"\nTrain vs Test Distribution:")
+        print(f"   Correlation: {correlation:.3f}")
+        print(f"   Average difference: {avg_diff:.2f} points")
         
-        # Catégories avec écart > 2 points
+        # Categories with gap > 2 points
         diffs = (train_aligned - test_aligned).abs() * 100
         large_diffs = diffs[diffs > 2]
         if len(large_diffs) > 0:
-            print(f"   ⚠️  {len(large_diffs)} catégories avec écart > 2 points:")
+            print(f"   {len(large_diffs)} categories with gap > 2 points:")
             for cat_id, diff in large_diffs.head(5).items():
                 print(f"      - {cat_id}: train {train_aligned[cat_id]*100:.1f}% vs test {test_aligned[cat_id]*100:.1f}% (diff: {diff:.1f})")
         else:
-            print(f"   ✓ Toutes les catégories ont une distribution similaire")
+            print(f"   All categories have similar distribution")
     
     def generate_report(self, test_path=None):
-        """Génère un rapport complet d'audit"""
+        """Generate complete audit report"""
         print("\n" + "="*60)
-        print("RAPPORT D'AUDIT COMPLET")
+        print("COMPLETE AUDIT REPORT")
         print("="*60)
         
-        # Charger les données
+        # Load data
         self.load_data()
         
         # Analyses
@@ -409,27 +409,27 @@ class TaxonomyAuditor:
         self.detect_inconsistencies()
         self.evaluate_semantic_coherence(threshold=0.4)
         
-        # Vérification train/test si test_path fourni
+        # Train/test check if test_path provided
         if test_path:
             test_full_path = Path(__file__).parent.parent / test_path if not Path(test_path).is_absolute() else Path(test_path)
             if test_full_path.exists():
                 self.check_train_test_distribution(test_full_path)
             else:
-                print(f"\n⚠️  Fichier test non trouvé: {test_full_path}")
+                print(f"\nTest file not found: {test_full_path}")
         
         print("\n" + "="*60)
-        print("✓ Audit terminé")
+        print("Audit completed")
         print("="*60)
 
 
 def main():
-    """Point d'entrée principal"""
+    """Main entry point"""
     base_path = Path(__file__).parent.parent
     train_path = base_path / 'data' / 'trainset.csv'
     test_path = base_path / 'data' / 'testset.csv'
     
     if not train_path.exists():
-        print(f"Fichier non trouvé: {train_path}")
+        print(f"File not found: {train_path}")
         return
     
     auditor = TaxonomyAuditor(train_path)
@@ -438,4 +438,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

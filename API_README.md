@@ -1,61 +1,61 @@
-# API FastAPI - Classification E-commerce
+# FastAPI - E-commerce Classification
 
-API REST pour le service de classification de produits e-commerce avec instrumentation de base.
+REST API for e-commerce product classification service with basic instrumentation.
 
-## 🚀 Démarrage rapide
+## Quick Start
 
-### 1. Installer les dépendances
+### 1. Install Dependencies
 
-**Option A : Script automatique (recommandé)**
+**Option A: Automatic script (recommended)**
 ```bash
 ./install.sh
 ```
 
-**Option B : Installation manuelle**
+**Option B: Manual installation**
 ```bash
-# Créer/activer le venv
+# Create/activate venv
 python3 -m venv venv
 source venv/bin/activate
 
-# Installer PyTorch CPU-only d'abord (évite les problèmes CUDA)
+# Install PyTorch CPU-only first (avoids CUDA issues)
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# Installer les autres dépendances
+# Install other dependencies
 pip install -r requirements.txt
 ```
 
-> **Note** : PyTorch est installé en mode CPU-only pour éviter les erreurs avec `nvidia_cublas_cu12`. Si vous avez besoin du support GPU, installez PyTorch avec CUDA séparément.
+> **Note**: PyTorch is installed in CPU-only mode to avoid errors with `nvidia_cublas_cu12`. If you need GPU support, install PyTorch with CUDA separately.
 
-### 2. Entraîner le modèle (si pas déjà fait)
+### 2. Train the Model (if not already done)
 
 ```bash
 python3 src/train.py
 ```
 
-### 3. Démarrer l'API
+### 3. Start the API
 
 ```bash
 ./start_api.sh
 ```
 
-Ou manuellement :
+Or manually:
 
 ```bash
 uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-L'API sera accessible sur : http://localhost:8000
+The API will be accessible at: http://localhost:8000
 
-## 📋 Endpoints
+## Endpoints
 
 ### `POST /classify`
-Classifie un produit dans une catégorie.
+Classify a product into a category.
 
 **Request:**
 ```json
 {
   "title": "Samsung Galaxy S21",
-  "description": "Smartphone Android avec écran 6.2 pouces"
+  "description": "Android smartphone with 6.2 inch screen"
 }
 ```
 
@@ -63,14 +63,14 @@ Classifie un produit dans une catégorie.
 ```json
 {
   "category_id": "12345",
-  "category_path": "Electronique > Smartphones > Samsung",
+  "category_path": "Electronics > Smartphones > Samsung",
   "confidence": 0.87,
   "processing_time_ms": 245.3
 }
 ```
 
 ### `GET /health`
-Vérifie l'état de santé de l'API.
+Check API health status.
 
 **Response:**
 ```json
@@ -81,98 +81,97 @@ Vérifie l'état de santé de l'API.
 ```
 
 ### `GET /metrics`
-Endpoint Prometheus pour les métriques.
+Prometheus endpoint for metrics.
 
 ### `GET /docs`
-Documentation interactive Swagger UI.
+Interactive Swagger UI documentation.
 
-## 📊 Métriques (5 clés)
+## Metrics (5 Key Metrics)
 
-L'API expose 5 métriques principales via Prometheus :
+The API exposes 5 main metrics via Prometheus:
 
 1. **`api_request_duration_seconds`** (Histogram)
-   - Latence des requêtes par endpoint et status
+   - Request latency per endpoint and status
 
 2. **`api_requests_total`** (Counter)
-   - Throughput : nombre total de requêtes
+   - Throughput: total number of requests
 
 3. **`api_errors_total`** (Counter)
-   - Taux d'erreur : erreurs 4xx, 5xx, exceptions
+   - Error rate: 4xx, 5xx errors, exceptions
 
 4. **`api_confidence_score_average`** (Gauge)
-   - Score de confiance moyen des prédictions
+   - Average confidence score of predictions
 
 5. **`api_inference_duration_seconds`** (Histogram)
-   - Temps d'inférence du modèle
+   - Model inference time
 
-## 🔍 Exemples d'utilisation
+## Usage Examples
 
-### Avec curl
+### With curl
 
 ```bash
-# Classifier un produit
+# Classify a product
 curl -X POST "http://localhost:8000/classify" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "iPhone 14 Pro",
-    "description": "Smartphone Apple avec puce A16"
+    "description": "Apple smartphone with A16 chip"
   }'
 
-# Vérifier la santé
+# Check health
 curl http://localhost:8000/health
 
-# Récupérer les métriques
+# Get metrics
 curl http://localhost:8000/metrics
 ```
 
-### Avec Python
+### With Python
 
 ```python
 import requests
 
-# Classifier un produit
+# Classify a product
 response = requests.post(
     "http://localhost:8000/classify",
     json={
         "title": "MacBook Pro 16",
-        "description": "Ordinateur portable Apple M2"
+        "description": "Apple laptop with M2 chip"
     }
 )
 print(response.json())
 ```
 
-## 📈 Visualisation des métriques
+## Metrics Visualization
 
-Les métriques sont au format Prometheus et peuvent être :
-- Scrapées par Prometheus
-- Visualisées dans Grafana
-- Intégrées dans Cloud Monitoring (GCP)
+Metrics are in Prometheus format and can be:
+- Scraped by Prometheus
+- Visualized in Grafana
+- Integrated with Cloud Monitoring (GCP)
 
-### Exemple de requête PromQL
+### PromQL Query Examples
 
 ```promql
-# Latence P95
+# Latency P95
 histogram_quantile(0.95, api_request_duration_seconds_bucket)
 
-# Throughput (requêtes/seconde)
+# Throughput (requests/second)
 rate(api_requests_total[5m])
 
-# Taux d'erreur
+# Error rate
 rate(api_errors_total[5m]) / rate(api_requests_total[5m])
 ```
 
-## 🛠️ Configuration
+## Configuration
 
-Le modèle est chargé depuis : `results/classification/flat_model.pkl`
+The model is loaded from: `results/classification/flat_model.pkl`
 
-Assurez-vous que ce fichier existe avant de démarrer l'API.
+Make sure this file exists before starting the API.
 
-## 🔒 Prochaines étapes
+## Next Steps
 
-Pour la production, considérer :
-- Authentification (API Keys, OAuth)
+For production, consider:
+- Authentication (API Keys, OAuth)
 - Rate limiting
 - Cloud Endpoints / API Gateway
-- Logging structuré
-- Health checks avancés (readiness/liveness)
-
+- Structured logging
+- Advanced health checks (readiness/liveness)
