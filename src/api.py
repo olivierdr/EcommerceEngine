@@ -1,86 +1,27 @@
 """
 FastAPI for E-commerce Classification Service
-With OpenTelemetry instrumentation for Cloud Monitoring and Cloud Trace
+With structured logging for Cloud Logging metrics
 """
 
 import os
 import time
 import pickle
+import logging
+import json
 from pathlib import Path
 from typing import Optional
-from contextlib import nullcontext
-import pandas as pd
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 from sentence_transformers import SentenceTransformer
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import LabelEncoder
 import warnings
 warnings.filterwarnings('ignore')
 
-# OpenTelemetry imports
-try:
-    from opentelemetry import trace, metrics
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.exporter.gcp.trace import CloudTraceSpanExporter
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.requests import RequestsInstrumentor
-    
-    # Try to import Cloud Monitoring (may be in alpha)
-    try:
-        from opentelemetry.exporter.gcp.monitoring import GcpMonitoringMetricsExporter
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        GCP_MONITORING_AVAILABLE = True
-    except ImportError:
-        GCP_MONITORING_AVAILABLE = False
-        print("Cloud Monitoring exporter not available, only traces will be exported")
-    
-    # Initialize OpenTelemetry for GCP (only if on GCP)
-    if os.getenv("GOOGLE_CLOUD_PROJECT"):
-        # Configure Resource with service metadata
-        resource = Resource.create({
-            "service.name": "ecommerce-classification-api",
-            "service.version": "1.0.0",
-        })
-        
-        # Configure Cloud Trace
-        trace_provider = TracerProvider(resource=resource)
-        cloud_trace_exporter = CloudTraceSpanExporter()
-        trace_provider.add_span_processor(BatchSpanProcessor(cloud_trace_exporter))
-        trace.set_tracer_provider(trace_provider)
-        print("Cloud Trace configured")
-        
-        # Configure Cloud Monitoring (metrics) if available
-        if GCP_MONITORING_AVAILABLE:
-            try:
-                metric_reader = PeriodicExportingMetricReader(
-                    GcpMonitoringMetricsExporter(),
-                    export_interval_millis=60000  # Export every 60 seconds
-                )
-                metrics_provider = MeterProvider(
-                    resource=resource,
-                    metric_readers=[metric_reader]
-                )
-                metrics.set_meter_provider(metrics_provider)
-                print("Cloud Monitoring configured")
-            except Exception as e:
-                print(f"Error configuring Cloud Monitoring: {e}")
-        
-        OTEL_ENABLED = True
-    else:
-        OTEL_ENABLED = False
-except ImportError as e:
-    OTEL_ENABLED = False
-    trace = None
-    metrics = None
-    print(f"OpenTelemetry not available: {e}")
+# Configure structured logging for Cloud Logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
 
 
 # ==================== MODEL ====================
@@ -94,6 +35,7 @@ class ClassificationModel:
         self.label_encoder = None
         self.embedding_model = None
         self.cat_to_path = {}
+        self.cat_to_name = {}
         self.load_model()
     
     def load_model(self):
@@ -109,6 +51,15 @@ class ClassificationModel:
         self.label_encoder = model_data['label_encoder']
         self.cat_to_path = model_data.get('cat_to_path', {})
         
+        # Load category names
+        names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
+        if names_path.exists():
+            with open(names_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for cat_id, info in data.items():
+                    self.cat_to_name[cat_id] = info['name'] if isinstance(info, dict) else info
+            print(f"Loaded {len(self.cat_to_name)} category names")
+        
         # Load embedding model
         embedding_model_name = model_data.get('embedding_model_name', 'paraphrase-multilingual-MiniLM-L12-v2')
         print(f"Loading embedding model: {embedding_model_name}...")
@@ -118,51 +69,30 @@ class ClassificationModel:
     
     def predict_single(self, title: str, description: str = ""):
         """Predict category for a single product"""
-        tracer = trace.get_tracer(__name__) if OTEL_ENABLED else None
+        # Prepare text
+        text = f"{title} {description}".strip()
         
-        # Create main span if OpenTelemetry is enabled
-        span_ctx = tracer.start_as_current_span("model.predict") if tracer else nullcontext()
+        # Generate embedding
+        embedding = self.embedding_model.encode([text], show_progress_bar=False)
         
-        with span_ctx:
-            # Prepare text
-            text = f"{title} {description}".strip()
-            
-            # Generate embedding (with span)
-            if tracer:
-                with tracer.start_as_current_span("model.embedding"):
-                    embedding = self.embedding_model.encode([text], show_progress_bar=False)
-            else:
-                embedding = self.embedding_model.encode([text], show_progress_bar=False)
-            
-            # Predict (with span)
-            if tracer:
-                with tracer.start_as_current_span("model.classify"):
-                    y_pred_encoded = self.classifier.predict(embedding)[0]
-                    y_pred = self.label_encoder.inverse_transform([y_pred_encoded])[0]
-                    y_proba = self.classifier.predict_proba(embedding)[0]
-            else:
-                y_pred_encoded = self.classifier.predict(embedding)[0]
-                y_pred = self.label_encoder.inverse_transform([y_pred_encoded])[0]
-                y_proba = self.classifier.predict_proba(embedding)[0]
-            
-            confidence = float(np.max(y_proba))
-            category_path = self.cat_to_path.get(y_pred, "N/A")
-            
-            # Add attributes to span
-            if tracer:
-                span = trace.get_current_span()
-                if span:
-                    span.set_attribute("prediction.category_id", str(y_pred))
-                    span.set_attribute("prediction.confidence", confidence)
-            
-            return {
-                'category_id': str(y_pred),
-                'category_path': category_path,
-                'confidence': confidence
-            }
+        # Predict
+        y_pred_encoded = self.classifier.predict(embedding)[0]
+        y_pred = self.label_encoder.inverse_transform([y_pred_encoded])[0]
+        y_proba = self.classifier.predict_proba(embedding)[0]
+        
+        confidence = float(np.max(y_proba))
+        category_path = self.cat_to_path.get(y_pred, "N/A")
+        category_name = self.cat_to_name.get(y_pred, "Unknown")
+        
+        return {
+            'category_id': str(y_pred),
+            'category_name': category_name,
+            'category_path': category_path,
+            'confidence': confidence
+        }
 
 
-# ==================== METRICS ====================
+# ==================== PROMETHEUS METRICS ====================
 
 # 1. Latency (response time)
 request_duration = Histogram(
@@ -210,11 +140,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Instrument FastAPI with OpenTelemetry (if available)
-if OTEL_ENABLED:
-    FastAPIInstrumentor.instrument_app(app)
-    RequestsInstrumentor().instrument()
-
 # Load model at startup
 try:
     model = ClassificationModel()
@@ -232,6 +157,7 @@ class ProductRequest(BaseModel):
 
 class ClassificationResponse(BaseModel):
     category_id: str
+    category_name: str
     category_path: str
     confidence: float
     processing_time_ms: float
@@ -271,7 +197,6 @@ async def metrics_middleware(request, call_next):
         return response
     
     except Exception as e:
-        status = 500
         duration = time.time() - start_time
         
         # Record error
@@ -295,36 +220,42 @@ async def classify_product(product: ProductRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
-    tracer = trace.get_tracer(__name__) if OTEL_ENABLED else None
-    
     try:
         # Measure inference time
         inference_start = time.time()
         
-        # Predict (span will be created in predict_single)
+        # Predict
         result = model.predict_single(product.title, product.description or "")
         
         inference_time = time.time() - inference_start
         
-        # Record inference time
+        # Record inference time (Prometheus)
         inference_duration.observe(inference_time)
         
-        # Update average confidence
+        # Update average confidence (Prometheus)
         global _confidence_sum, _confidence_count
         _confidence_sum += result['confidence']
         _confidence_count += 1
         if _confidence_count > 0:
             confidence_score_avg.set(_confidence_sum / _confidence_count)
         
-        # Add attributes to main span
-        if tracer:
-            span = trace.get_current_span()
-            if span:
-                span.set_attribute("response.confidence", result['confidence'])
-                span.set_attribute("response.processing_time_ms", inference_time * 1000)
+        # Structured logging for Cloud Logging metrics
+        is_uncertain = result['confidence'] < 0.5
+        log_entry = {
+            "severity": "INFO",
+            "message": "classification_result",
+            "category_id": result['category_id'],
+            "category_name": result['category_name'],
+            "confidence": round(result['confidence'], 3),
+            "is_uncertain": is_uncertain,
+            "inference_time_ms": round(inference_time * 1000, 1),
+            "title_length": len(product.title)
+        }
+        logger.info(json.dumps(log_entry))
         
         return ClassificationResponse(
             category_id=result['category_id'],
+            category_name=result['category_name'],
             category_path=result['category_path'],
             confidence=result['confidence'],
             processing_time_ms=inference_time * 1000
@@ -332,14 +263,6 @@ async def classify_product(product: ProductRequest):
     
     except Exception as e:
         errors_total.labels(method="POST", endpoint="/classify", error_type="prediction_error").inc()
-        
-        # Record error in span
-        if tracer:
-            span = trace.get_current_span()
-            if span:
-                span.record_exception(e)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-        
         raise HTTPException(status_code=500, detail=f"Classification error: {str(e)}")
 
 
@@ -353,7 +276,7 @@ async def health_check():
 
 
 @app.get("/metrics")
-async def metrics():
+async def get_metrics():
     """Prometheus endpoint for metrics"""
     return Response(
         content=generate_latest(),

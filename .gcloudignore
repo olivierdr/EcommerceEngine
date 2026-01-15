@@ -1,27 +1,14 @@
-# Fichiers à ignorer pour Cloud Build
-# Mais on garde results/classification/flat_model.pkl
+# Files to ignore for Cloud Build
 
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-.Python
 venv/
-env/
 .venv
 .git/
 .gitignore
-*.md
-!README.md
 data/
 .cache/
-*.sh
-!deploy_cloud_run.sh
-install.sh
-start_api.sh
 .DS_Store
 *.log
-results/audit/
-results/classification/*.json
-!results/classification/flat_model.pkl
 

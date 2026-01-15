@@ -17,9 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copier le code source
 COPY src/ ./src/
 
-# Créer le répertoire pour le modèle et copier le modèle
-RUN mkdir -p ./results/classification
+# Create directories and copy model + category names
+RUN mkdir -p ./results/classification ./results/audit
 COPY results/classification/flat_model.pkl ./results/classification/flat_model.pkl
+COPY results/audit/category_names.json ./results/audit/category_names.json
 
 # Exposer le port (Cloud Run utilise PORT env var)
 ENV PORT=8080
