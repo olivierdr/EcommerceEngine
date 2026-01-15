@@ -29,7 +29,7 @@ pip install -r requirements.txt
 ### 2. Entraîner le modèle (si pas déjà fait)
 
 ```bash
-python3 src/classify_flat.py
+python3 src/train.py
 ```
 
 ### 3. Démarrer l'API

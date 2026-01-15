@@ -15,7 +15,7 @@ source venv/bin/activate
 MODEL_PATH="results/classification/flat_model.pkl"
 if [ ! -f "$MODEL_PATH" ]; then
     echo "⚠️  Attention: Le modèle n'existe pas encore."
-    echo "   Exécutez d'abord: python3 src/classify_flat.py"
+    echo "   Exécutez d'abord: python3 src/train.py"
     echo ""
 fi
 

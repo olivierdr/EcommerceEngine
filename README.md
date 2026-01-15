@@ -17,7 +17,9 @@ ClassificationEcommerce/
 │
 ├── src/                           # Code source
 │   ├── audit_taxonomy.py         # Étape 1 : Audit de la taxonomie
-│   └── classify_flat.py          # Classification flat (baseline)
+│   ├── train.py                  # Étape 2 : Entraînement du classifieur
+│   ├── evaluate.py               # Étape 2 : Évaluation et analyses
+│   └── api.py                    # API FastAPI avec observabilité GCP
 │
 ├── results/                       # Résultats générés
 │   ├── audit/                    # Résultats de l'audit
@@ -90,7 +92,8 @@ python3 src/audit_taxonomy.py
 
 **Exécution :**
 ```bash
-python3 src/classify_flat.py
+python3 src/train.py      # Entraînement
+python3 src/evaluate.py   # Évaluation et analyses
 ```
 
 **Résultats :**
@@ -104,6 +107,32 @@ python3 src/classify_flat.py
 - `uncertain_categories_analysis.json` : Top 10 catégories problématiques
 - `confusion_patterns.json` : Top 10 patterns de confusion entre catégories
 
+### Étape 3 : API avec Observabilité (Optionnel)
+
+**Principe :** API REST pour la classification en production avec instrumentation OpenTelemetry pour Cloud Monitoring et Cloud Trace.
+
+**Exécution locale :**
+```bash
+./start_api.sh
+```
+
+L'API sera accessible sur `http://localhost:8000` avec :
+- `/classify` : Endpoint de classification (POST)
+- `/health` : Health check
+- `/metrics` : Métriques Prometheus
+- `/docs` : Documentation Swagger
+
+**Déploiement sur Cloud Run :**
+```bash
+export GOOGLE_CLOUD_PROJECT=your-project-id
+./deploy_cloud_run.sh
+```
+
+**Observabilité :**
+- Métriques exportées vers Cloud Monitoring (latence, throughput, erreurs, confiance)
+- Traces exportées vers Cloud Trace (spans détaillés pour embedding, classification)
+- Dashboards et alertes configurables (voir [CLOUD_MONITORING.md](CLOUD_MONITORING.md))
+
 ## Technologies Utilisées
 
 - **Python 3**
@@ -111,6 +140,8 @@ python3 src/classify_flat.py
 - **sentence-transformers** : Embeddings multilingues (FR/DE/EN)
 - **pandas** : Manipulation de données
 - **numpy** : Calculs numériques
+- **FastAPI** : API REST (optionnel)
+- **OpenTelemetry** : Observabilité (Cloud Monitoring, Cloud Trace)
 
 ## Documentation Complémentaire
 

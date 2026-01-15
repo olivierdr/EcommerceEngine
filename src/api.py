@@ -1,12 +1,14 @@
 """
 API FastAPI pour le service de classification E-commerce
-Avec instrumentation de base (5 métriques clés)
+Avec instrumentation OpenTelemetry pour Cloud Monitoring et Cloud Trace
 """
 
+import os
 import time
 import pickle
 from pathlib import Path
 from typing import Optional
+from contextlib import nullcontext
 import pandas as pd
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -19,6 +21,66 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder
 import warnings
 warnings.filterwarnings('ignore')
+
+# OpenTelemetry imports
+try:
+    from opentelemetry import trace, metrics
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.exporter.gcp.trace import CloudTraceSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    
+    # Essayer d'importer Cloud Monitoring (peut être en alpha)
+    try:
+        from opentelemetry.exporter.gcp.monitoring import GcpMonitoringMetricsExporter
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        GCP_MONITORING_AVAILABLE = True
+    except ImportError:
+        GCP_MONITORING_AVAILABLE = False
+        print("⚠️  Cloud Monitoring exporter non disponible, seules les traces seront exportées")
+    
+    # Initialiser OpenTelemetry pour GCP (seulement si on est sur GCP)
+    if os.getenv("GOOGLE_CLOUD_PROJECT"):
+        # Configurer le Resource avec les métadonnées du service
+        resource = Resource.create({
+            "service.name": "ecommerce-classification-api",
+            "service.version": "1.0.0",
+        })
+        
+        # Configurer Cloud Trace
+        trace_provider = TracerProvider(resource=resource)
+        cloud_trace_exporter = CloudTraceSpanExporter()
+        trace_provider.add_span_processor(BatchSpanProcessor(cloud_trace_exporter))
+        trace.set_tracer_provider(trace_provider)
+        print("✓ Cloud Trace configuré")
+        
+        # Configurer Cloud Monitoring (métriques) si disponible
+        if GCP_MONITORING_AVAILABLE:
+            try:
+                metric_reader = PeriodicExportingMetricReader(
+                    GcpMonitoringMetricsExporter(),
+                    export_interval_millis=60000  # Exporter toutes les 60 secondes
+                )
+                metrics_provider = MeterProvider(
+                    resource=resource,
+                    metric_readers=[metric_reader]
+                )
+                metrics.set_meter_provider(metrics_provider)
+                print("✓ Cloud Monitoring configuré")
+            except Exception as e:
+                print(f"⚠️  Erreur lors de la configuration de Cloud Monitoring: {e}")
+        
+        OTEL_ENABLED = True
+    else:
+        OTEL_ENABLED = False
+except ImportError as e:
+    OTEL_ENABLED = False
+    trace = None
+    metrics = None
+    print(f"⚠️  OpenTelemetry non disponible: {e}")
 
 
 # ==================== MODÈLE ====================
@@ -56,28 +118,48 @@ class ClassificationModel:
     
     def predict_single(self, title: str, description: str = ""):
         """Prédit la catégorie pour un seul produit"""
-        # Préparer le texte
-        text = f"{title} {description}".strip()
+        tracer = trace.get_tracer(__name__) if OTEL_ENABLED else None
         
-        # Générer l'embedding
-        embedding = self.embedding_model.encode([text], show_progress_bar=False)
+        # Créer le span principal si OpenTelemetry est activé
+        span_ctx = tracer.start_as_current_span("model.predict") if tracer else nullcontext()
         
-        # Prédire
-        y_pred_encoded = self.classifier.predict(embedding)[0]
-        y_pred = self.label_encoder.inverse_transform([y_pred_encoded])[0]
-        
-        # Obtenir la probabilité
-        y_proba = self.classifier.predict_proba(embedding)[0]
-        confidence = float(np.max(y_proba))
-        
-        # Obtenir le chemin de catégorie
-        category_path = self.cat_to_path.get(y_pred, "N/A")
-        
-        return {
-            'category_id': str(y_pred),
-            'category_path': category_path,
-            'confidence': confidence
-        }
+        with span_ctx:
+            # Préparer le texte
+            text = f"{title} {description}".strip()
+            
+            # Générer l'embedding (avec span)
+            if tracer:
+                with tracer.start_as_current_span("model.embedding"):
+                    embedding = self.embedding_model.encode([text], show_progress_bar=False)
+            else:
+                embedding = self.embedding_model.encode([text], show_progress_bar=False)
+            
+            # Prédire (avec span)
+            if tracer:
+                with tracer.start_as_current_span("model.classify"):
+                    y_pred_encoded = self.classifier.predict(embedding)[0]
+                    y_pred = self.label_encoder.inverse_transform([y_pred_encoded])[0]
+                    y_proba = self.classifier.predict_proba(embedding)[0]
+            else:
+                y_pred_encoded = self.classifier.predict(embedding)[0]
+                y_pred = self.label_encoder.inverse_transform([y_pred_encoded])[0]
+                y_proba = self.classifier.predict_proba(embedding)[0]
+            
+            confidence = float(np.max(y_proba))
+            category_path = self.cat_to_path.get(y_pred, "N/A")
+            
+            # Ajouter des attributs au span
+            if tracer:
+                span = trace.get_current_span()
+                if span:
+                    span.set_attribute("prediction.category_id", str(y_pred))
+                    span.set_attribute("prediction.confidence", confidence)
+            
+            return {
+                'category_id': str(y_pred),
+                'category_path': category_path,
+                'confidence': confidence
+            }
 
 
 # ==================== MÉTRIQUES ====================
@@ -127,6 +209,11 @@ app = FastAPI(
     description="API de classification de produits e-commerce avec observabilité",
     version="1.0.0"
 )
+
+# Instrumenter FastAPI avec OpenTelemetry (si disponible)
+if OTEL_ENABLED:
+    FastAPIInstrumentor.instrument_app(app)
+    RequestsInstrumentor().instrument()
 
 # Charger le modèle au démarrage
 try:
@@ -208,11 +295,13 @@ async def classify_product(product: ProductRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Modèle non chargé")
     
+    tracer = trace.get_tracer(__name__) if OTEL_ENABLED else None
+    
     try:
         # Mesurer le temps d'inférence
         inference_start = time.time()
         
-        # Prédire
+        # Prédire (le span sera créé dans predict_single)
         result = model.predict_single(product.title, product.description or "")
         
         inference_time = time.time() - inference_start
@@ -227,6 +316,13 @@ async def classify_product(product: ProductRequest):
         if _confidence_count > 0:
             confidence_score_avg.set(_confidence_sum / _confidence_count)
         
+        # Ajouter des attributs au span principal
+        if tracer:
+            span = trace.get_current_span()
+            if span:
+                span.set_attribute("response.confidence", result['confidence'])
+                span.set_attribute("response.processing_time_ms", inference_time * 1000)
+        
         return ClassificationResponse(
             category_id=result['category_id'],
             category_path=result['category_path'],
@@ -236,6 +332,14 @@ async def classify_product(product: ProductRequest):
     
     except Exception as e:
         errors_total.labels(method="POST", endpoint="/classify", error_type="prediction_error").inc()
+        
+        # Enregistrer l'erreur dans le span
+        if tracer:
+            span = trace.get_current_span()
+            if span:
+                span.record_exception(e)
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+        
         raise HTTPException(status_code=500, detail=f"Erreur lors de la classification: {str(e)}")
 
 
