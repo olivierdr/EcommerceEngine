@@ -6,8 +6,8 @@ import requests
 import time
 
 # Change this to your Cloud Run URL (or localhost for local testing)
-# API_URL = "https://ecommerce-classification-api-pjplfwgp5q-ew.a.run.app"
-API_URL = "http://localhost:8000"
+API_URL = "https://ecommerce-classification-api-pjplfwgp5q-ew.a.run.app"
+#API_URL = "http://localhost:8000"
 
 # Sample products to test
 TEST_PRODUCTS = [

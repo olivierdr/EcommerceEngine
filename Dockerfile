@@ -10,11 +10,14 @@ RUN apt-get update && apt-get install -y \
 # Définir le répertoire de travail
 WORKDIR /app
 
-# Copier les requirements et installer les dépendances
+# Copy requirements and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code source
+# Pre-download the embedding model (cached in image)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+
+# Copy source code
 COPY src/ ./src/
 
 # Create directories and copy model + category names
