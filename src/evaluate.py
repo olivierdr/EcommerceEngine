@@ -1,5 +1,5 @@
 """
-Classifier evaluation and detailed analyses
+Évaluation du classifieur et analyses détaillées
 """
 
 import pandas as pd
@@ -13,16 +13,16 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-def evaluate(classifier, train_path, test_path, confidence_threshold=0.5):
-    """Evaluate model on train and test sets"""
+def evaluate(classifier, train_path, val_path, confidence_threshold=0.5):
+    """Évalue le modèle sur train et validation"""
     print("\n" + "="*60)
-    print("EVALUATION")
+    print("ÉVALUATION")
     print("="*60)
     
-    # Evaluation on train
-    print("\nEvaluating on training data...")
+    # Évaluation sur train
+    print("\nÉvaluation sur données d'entraînement...")
     if classifier.X_train is not None and classifier.df_train is not None:
-        print("   Reusing training embeddings")
+        print("   ✓ Réutilisation des embeddings d'entraînement")
         y_pred_encoded = classifier.classifier.predict(classifier.X_train)
         y_pred_train = classifier.label_encoder.inverse_transform(y_pred_encoded)
         y_pred_proba = classifier.classifier.predict_proba(classifier.X_train)
@@ -41,15 +41,15 @@ def evaluate(classifier, train_path, test_path, confidence_threshold=0.5):
     print(f"   Accuracy: {train_acc:.4f} ({train_acc*100:.2f}%)")
     print(f"   Precision: {train_prec:.4f} | Recall: {train_rec:.4f} | F1: {train_f1:.4f}")
     
-    # Evaluation on test
-    print("\nEvaluating on test data...")
-    df_test = pd.read_csv(test_path)
+    # Évaluation sur validation
+    print("\nÉvaluation sur données de validation...")
+    df_test = pd.read_csv(val_path)
     
-    # Test embeddings cache
+    # Cache des embeddings validation
     cache_dir = Path(__file__).parent.parent / '.cache'
     cache_dir.mkdir(exist_ok=True)
-    cache_hash = hashlib.md5(str(test_path).encode()).hexdigest()
-    cache_path = cache_dir / f'test_embeddings_{cache_hash}.npy'
+    cache_hash = hashlib.md5(str(val_path).encode()).hexdigest()
+    cache_path = cache_dir / f'val_embeddings_{cache_hash}.npy'
     
     X_test = classifier.prepare_features(df_test, show_progress=True, cache_path=cache_path)
     y_pred_encoded = classifier.classifier.predict(X_test)
@@ -66,17 +66,17 @@ def evaluate(classifier, train_path, test_path, confidence_threshold=0.5):
     print(f"   Accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
     print(f"   Precision: {test_prec:.4f} | Recall: {test_rec:.4f} | F1: {test_f1:.4f}")
     
-    # Train vs test comparison
-    print("\nTrain vs Test Comparison:")
+    # Comparaison train vs validation
+    print("\nComparaison Train vs Validation:")
     gap_acc = train_acc - test_acc
-    print(f"   Accuracy gap: {gap_acc:.4f} ({gap_acc*100:.2f} points)")
+    print(f"   Écart Accuracy: {gap_acc:.4f} ({gap_acc*100:.2f} points)")
     
     if gap_acc > 0.05:
-        print(f"   Overfitting detected (gap > 5 points)")
+        print(f"   ⚠️  Sur-apprentissage détecté (écart > 5 points)")
     else:
-        print(f"   No significant overfitting")
+        print(f"   ✓ Pas de sur-apprentissage significatif")
     
-    # Detailed analyses
+    # Analyses détaillées
     analyze_categories(df_test, y_pred_test, conf_test, y_true_test, 
                       classifier.cat_to_path, confidence_threshold)
     
@@ -90,9 +90,9 @@ def evaluate(classifier, train_path, test_path, confidence_threshold=0.5):
 
 
 def analyze_categories(df, predictions, confidence_scores, y_true, cat_to_path, threshold=0.5):
-    """Analysis: generate 3 JSON files (certain, uncertain, confusion)"""
+    """Analyse : génère les 3 JSON (certain, uncertain, confusion)"""
     print("\n" + "="*60)
-    print("DETAILED ANALYSES")
+    print("ANALYSES DÉTAILLÉES")
     print("="*60)
     
     category_names = load_category_names()
@@ -177,7 +177,7 @@ def analyze_categories(df, predictions, confidence_scores, y_true, cat_to_path, 
                     'title': str(row['title'])[:100] if pd.notna(row['title']) else ''
                 })
     
-    # Save Certain
+    # Sauvegarder Certain
     certain_stats.sort(key=lambda x: x['n_certain_products'], reverse=True)
     certain_df = df_analysis[df_analysis['is_certain']]
     output_path = Path(__file__).parent.parent / 'results' / 'classification'
@@ -194,7 +194,7 @@ def analyze_categories(df, predictions, confidence_scores, y_true, cat_to_path, 
             'top_10_categories': certain_stats[:10]
         }, f, indent=2, ensure_ascii=False)
     
-    # Save Uncertain
+    # Sauvegarder Uncertain
     uncertain_stats.sort(key=lambda x: x['n_uncertain_products'], reverse=True)
     uncertain_df = df_analysis[~df_analysis['is_certain']]
     
@@ -209,7 +209,7 @@ def analyze_categories(df, predictions, confidence_scores, y_true, cat_to_path, 
             'top_10_categories': uncertain_stats[:10]
         }, f, indent=2, ensure_ascii=False)
     
-    # Save Confusion Patterns
+    # Sauvegarder Confusion Patterns
     patterns = []
     errors_all = df_analysis[df_analysis['predicted_category'] != df_analysis['category_id']]
     for (true_cat, pred_cat), data in confusion_pairs.items():
@@ -240,45 +240,45 @@ def analyze_categories(df, predictions, confidence_scores, y_true, cat_to_path, 
             'top_10_confusion_patterns': patterns[:10]
         }, f, indent=2, ensure_ascii=False)
     
-    print(f"   {len(certain_stats)} certain categories, {len(uncertain_stats)} uncertain")
-    print(f"   {len(patterns)} confusion patterns identified")
-    print(f"   3 JSON files generated")
+    print(f"   ✓ {len(certain_stats)} catégories certaines, {len(uncertain_stats)} incertaines")
+    print(f"   ✓ {len(patterns)} patterns de confusion identifiés")
+    print(f"   ✓ 3 fichiers JSON générés")
 
 
 def main():
     print("\n" + "="*60)
-    print("CLASSIFIER EVALUATION")
+    print("ÉVALUATION DU CLASSIFIEUR")
     print("="*60)
     
     base_path = Path(__file__).parent.parent
     train_path = base_path / 'data' / 'trainset.csv'
-    test_path = base_path / 'data' / 'testset.csv'
+    val_path = base_path / 'data' / 'valset.csv'
     model_path = base_path / 'results' / 'classification' / 'flat_model.pkl'
     
-    if not train_path.exists() or not test_path.exists():
-        print(f"Data files not found")
+    if not train_path.exists() or not val_path.exists():
+        print(f"Fichiers de données non trouvés")
         return None
     
-    # Load or train model
+    # Charger ou entraîner le modèle
     if model_path.exists():
-        print("\nLoading existing model...")
+        print("\nChargement du modèle existant...")
         classifier = FlatClassifier.load(model_path)
-        # Load training data to reuse embeddings
+        # Charger les données d'entraînement pour réutiliser les embeddings
         classifier.df_train = pd.read_csv(train_path)
         classifier.X_train = classifier.prepare_features(classifier.df_train, show_progress=True)
     else:
-        print("\nModel not found, training...")
+        print("\nModèle non trouvé, entraînement...")
         from train import main as train_main
         classifier = train_main()
     
-    # Evaluate
-    results = evaluate(classifier, train_path, test_path, confidence_threshold=0.5)
+    # Évaluer
+    results = evaluate(classifier, train_path, val_path, confidence_threshold=0.5)
     
-    # Save updated model
+    # Sauvegarder le modèle mis à jour
     classifier.save(model_path)
     
     print("\n" + "="*60)
-    print("Evaluation completed")
+    print("✓ Évaluation terminée")
     print("="*60)
     
     return results
@@ -286,3 +286,4 @@ def main():
 
 if __name__ == '__main__':
     results = main()
+

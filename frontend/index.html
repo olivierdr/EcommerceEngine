@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ecommerce Classification API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            color: #34495e;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #2980b9;
+        }
+
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            width: 300px;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+
+        .stat-card h3 {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #34495e;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+        .confidence-high {
+            background: #27ae60;
+        }
+
+        .confidence-medium {
+            background: #f39c12;
+        }
+
+        .confidence-low {
+            background: #e74c3c;
+        }
+
+        .correct {
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .incorrect {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #ecf0f1;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .title-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: help;
+            position: relative;
+        }
+
+        .title-cell:hover {
+            background: #e8f4f8;
+        }
+
+        .title-full {
+            display: none;
+            position: absolute;
+            background: #2c3e50;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 5px;
+            z-index: 1000;
+            max-width: 500px;
+            min-width: 200px;
+            word-wrap: break-word;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: normal;
+            pointer-events: none;
+        }
+
+        .title-cell:hover .title-full {
+            display: block;
+            top: 100%;
+            left: 0;
+            margin-top: 8px;
+        }
+
+        /* Flèche pour le tooltip */
+        .title-full::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 20px;
+            border: 6px solid transparent;
+            border-bottom-color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ecommerce Classification API</h1>
+
+        <!-- Configuration Section -->
+        <div class="section">
+            <h2>Configuration</h2>
+            <div class="controls">
+                <label>
+                    API URL:
+                    <input type="text" id="apiUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
+                </label>
+                <button onclick="testConnection()">Test Connection</button>
+            </div>
+            <div class="status" id="connectionStatus"></div>
+        </div>
+
+        <!-- Data Loading Section -->
+        <div class="section">
+            <h2>Data Loading</h2>
+            <div class="controls">
+                <input type="file" id="csvFile" accept=".csv">
+                <button onclick="loadCSV()">Load from File</button>
+                <button onclick="loadCSVFromServer()">Load from Server</button>
+                <span id="fileStatus"></span>
+            </div>
+            <div class="status" id="loadStatus"></div>
+        </div>
+
+        <!-- API Testing Section -->
+        <div class="section">
+            <h2>API Testing</h2>
+            <div class="controls">
+                <button onclick="testRandomProducts(10)" id="testBtn" disabled>Test 10 Random Products</button>
+                <button onclick="clearResults()">Clear Results</button>
+            </div>
+            <div id="progressContainer" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="section" id="statsSection" style="display: none;">
+            <h2>Statistics</h2>
+            <div class="stats">
+                <div class="stat-card">
+                    <h3>Products Tested</h3>
+                    <div class="value" id="statTested">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Accuracy</h3>
+                    <div class="value" id="statAccuracy">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Average Confidence</h3>
+                    <div class="value" id="statConfidence">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Average Latency (ms)</h3>
+                    <div class="value" id="statLatency">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="section" id="resultsSection" style="display: none;">
+            <h2>Results</h2>
+            <div class="controls">
+                <button onclick="exportJSON()">Export JSON</button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>True Category</th>
+                            <th>Prediction</th>
+                            <th>Confidence</th>
+                            <th>Correct</th>
+                            <th>Latency (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let products = [];
+        let results = [];
+        let apiUrl = 'http://localhost:8000';
+        let categoryNames = {}; // Cache des noms de catégories
+
+        // Improved CSV parser
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            if (lines.length < 2) {
+                throw new Error('CSV file must contain at least a header and one data row');
+            }
+            
+            // Parser la première ligne (en-têtes)
+            const headers = parseCSVLine(lines[0]);
+            const data = [];
+            
+            // Parser les lignes de données
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseCSVLine(lines[i]);
+                
+                // Ignorer les lignes vides ou incomplètes
+                if (values.length === 0 || values.every(v => v.trim() === '')) {
+                    continue;
+                }
+                
+                // Créer l'objet avec les en-têtes
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header.trim()] = (values[index] || '').trim();
+                });
+                
+                // Vérifier qu'on a au moins un titre (colonne minimale requise)
+                if (obj.title || obj.product_id) {
+                    data.push(obj);
+                }
+            }
+            
+            return data;
+        }
+
+        // Parser une ligne CSV en gérant les guillemets
+        function parseCSVLine(line) {
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+                
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        // Guillemet échappé
+                        current += '"';
+                        i++; // Skip next quote
+                    } else {
+                        // Toggle quote state
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    // Fin d'un champ
+                    values.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            // Ajouter le dernier champ
+            values.push(current);
+            
+            return values;
+        }
+
+        // Load CSV from file
+        function loadCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('loadStatus', 'Please select a CSV file', 'error');
+                return;
+            }
+            
+            showStatus('loadStatus', 'Loading...', 'info');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    products = parseCSV(e.target.result);
+                    if (products.length === 0) {
+                        showStatus('loadStatus', 'No products found in file', 'error');
+                        return;
+                    }
+                    document.getElementById('fileStatus').textContent = `✓ ${products.length} products loaded`;
+                    document.getElementById('testBtn').disabled = false;
+                    showStatus('loadStatus', `✓ ${products.length} products loaded successfully`, 'success');
+                } catch (error) {
+                    console.error('CSV parsing error:', error);
+                    showStatus('loadStatus', `Error: ${error.message}`, 'error');
+                }
+            };
+            reader.onerror = function() {
+                showStatus('loadStatus', 'Error reading file', 'error');
+            };
+            reader.readAsText(file);
+        }
+
+        // Load CSV from server
+        async function loadCSVFromServer() {
+            apiUrl = document.getElementById('apiUrl').value.trim();
+            if (!apiUrl) {
+                showStatus('loadStatus', 'Please configure the API URL first', 'error');
+                return;
+            }
+            
+            showStatus('loadStatus', 'Loading from server...', 'info');
+            try {
+                // Load category names in parallel
+                await loadCategoryNames();
+                
+                const response = await fetch(`${apiUrl}/testset`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const text = await response.text();
+                products = parseCSV(text);
+                if (products.length === 0) {
+                    showStatus('loadStatus', 'No products found in file', 'error');
+                    return;
+                }
+                document.getElementById('fileStatus').textContent = `✓ ${products.length} products loaded`;
+                document.getElementById('testBtn').disabled = false;
+                showStatus('loadStatus', `✓ ${products.length} products loaded from server`, 'success');
+            } catch (error) {
+                console.error('CSV loading error:', error);
+                showStatus('loadStatus', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Load category names
+        async function loadCategoryNames() {
+            apiUrl = document.getElementById('apiUrl').value.trim();
+            if (!apiUrl) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${apiUrl}/category-names`);
+                if (response.ok) {
+                    categoryNames = await response.json();
+                    console.log(`✓ ${Object.keys(categoryNames).length} category names loaded`);
+                }
+            } catch (error) {
+                console.warn('Unable to load category names:', error);
+            }
+        }
+
+        // Test connection
+        async function testConnection() {
+            apiUrl = document.getElementById('apiUrl').value.trim();
+            if (!apiUrl) {
+                showStatus('connectionStatus', 'Please enter a URL', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${apiUrl}/health`);
+                const data = await response.json();
+                if (data.status === 'healthy' && data.model_loaded) {
+                    showStatus('connectionStatus', '✓ Connection successful - Model loaded', 'success');
+                    // Load category names after successful connection
+                    await loadCategoryNames();
+                } else {
+                    showStatus('connectionStatus', '⚠ Connection successful but model not loaded', 'error');
+                }
+            } catch (error) {
+                showStatus('connectionStatus', `✗ Connection error: ${error.message}`, 'error');
+            }
+        }
+
+        // Test random products
+        async function testRandomProducts(count) {
+            if (products.length === 0) {
+                showStatus('loadStatus', 'Please load a CSV file first', 'error');
+                return;
+            }
+            
+            apiUrl = document.getElementById('apiUrl').value.trim();
+            if (!apiUrl) {
+                showStatus('connectionStatus', 'Please enter an API URL', 'error');
+                return;
+            }
+            
+            // Filter products with valid titles first
+            const validProducts = products.filter(p => {
+                const title = (p.title || '').trim();
+                return title && title.length > 0;
+            });
+            
+            if (validProducts.length === 0) {
+                showStatus('loadStatus', 'No products with valid titles found', 'error');
+                return;
+            }
+            
+            if (validProducts.length < count) {
+                showStatus('loadStatus', `Warning: Only ${validProducts.length} products with valid titles available (requested ${count})`, 'info');
+            }
+            
+            // Select random products - ensure we get exactly the requested count
+            const selectedProducts = [];
+            const availableIndices = Array.from({length: validProducts.length}, (_, i) => i);
+            
+            // Shuffle array to get random selection
+            for (let i = availableIndices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
+            }
+            
+            // Take exactly 'count' products (or all if less available)
+            const numToSelect = Math.min(count, validProducts.length);
+            for (let i = 0; i < numToSelect; i++) {
+                selectedProducts.push(validProducts[availableIndices[i]]);
+            }
+            
+            // Disable button and show progress
+            document.getElementById('testBtn').disabled = true;
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('statsSection').style.display = 'block';
+            
+            results = [];
+            const startTime = Date.now();
+            let successCount = 0;
+            let errorCount = 0;
+            
+            // Test each product
+            for (let i = 0; i < selectedProducts.length; i++) {
+                const product = selectedProducts[i];
+                const progress = ((i + 1) / selectedProducts.length) * 100;
+                document.getElementById('progressFill').style.width = progress + '%';
+                document.getElementById('progressFill').textContent = `${i + 1}/${selectedProducts.length} (${Math.round(progress)}%)`;
+                
+                try {
+                    // Validate product data before sending
+                    const title = (product.title || '').trim();
+                    const description = (product.description || '').trim();
+                    
+                    if (!title || title.length === 0) {
+                        throw new Error('Product title is empty or missing');
+                    }
+                    
+                    const requestStart = Date.now();
+                    const response = await fetch(`${apiUrl}/classify`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            title: title,
+                            description: description
+                        })
+                    });
+                    
+                    const requestTime = Date.now() - requestStart;
+                    
+                    if (!response.ok) {
+                        // Try to get error details from response
+                        let errorMessage = `HTTP ${response.status}`;
+                        try {
+                            const errorData = await response.json();
+                            if (errorData.detail) {
+                                if (Array.isArray(errorData.detail)) {
+                                    errorMessage = errorData.detail.map(e => e.msg || e).join(', ');
+                                } else {
+                                    errorMessage = errorData.detail;
+                                }
+                            }
+                        } catch (e) {
+                            // If we can't parse error, use status text
+                            errorMessage = response.statusText || `HTTP ${response.status}`;
+                        }
+                        throw new Error(errorMessage);
+                    }
+                    
+                    const prediction = await response.json();
+                    
+                    const result = {
+                        product_id: product.product_id,
+                        title: product.title,
+                        description: product.description,
+                        true_category_id: product.category_id,
+                        true_category_path: product.category_path,
+                        predicted_category_id: prediction.category_id,
+                        predicted_category_name: prediction.category_name,
+                        predicted_category_path: prediction.category_path,
+                        confidence: prediction.confidence,
+                        is_correct: product.category_id === prediction.category_id,
+                        processing_time_ms: prediction.processing_time_ms,
+                        request_time_ms: requestTime,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    results.push(result);
+                    successCount++;
+                    updateTable();
+                    updateStats();
+                    
+                } catch (error) {
+                    console.error(`Error for product ${product.product_id}:`, error);
+                    errorCount++;
+                    // Add error entry to results so we still show 10 rows
+                    results.push({
+                        product_id: product.product_id,
+                        title: product.title || 'N/A',
+                        description: product.description || '',
+                        true_category_id: product.category_id || 'N/A',
+                        true_category_path: product.category_path || 'N/A',
+                        predicted_category_id: 'ERROR',
+                        predicted_category_name: `Error: ${error.message}`,
+                        predicted_category_path: 'N/A',
+                        confidence: 0,
+                        is_correct: false,
+                        processing_time_ms: 0,
+                        request_time_ms: 0,
+                        timestamp: new Date().toISOString(),
+                        is_error: true
+                    });
+                    updateTable();
+                    updateStats();
+                }
+            }
+            
+            // Re-enable button
+            document.getElementById('testBtn').disabled = false;
+            document.getElementById('progressContainer').style.display = 'none';
+            
+            const totalTime = Date.now() - startTime;
+            if (errorCount > 0) {
+                showStatus('loadStatus', `✓ Test completed in ${totalTime}ms (${successCount} success, ${errorCount} errors)`, 'success');
+            } else {
+                showStatus('loadStatus', `✓ Test completed in ${totalTime}ms`, 'success');
+            }
+        }
+
+        // Get category name
+        function getCategoryName(categoryId) {
+            if (categoryNames[categoryId]) {
+                return categoryNames[categoryId];
+            }
+            return categoryId; // Fallback to ID if name not found
+        }
+
+        // Escape HTML to prevent injections
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Update table
+        function updateTable() {
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            
+            results.forEach(result => {
+                const row = document.createElement('tr');
+                
+                // Style row differently if it's an error
+                if (result.is_error) {
+                    row.style.opacity = '0.6';
+                    row.style.backgroundColor = '#fff3cd';
+                }
+                
+                const confidenceClass = result.confidence >= 0.7 ? 'confidence-high' : 
+                                      result.confidence >= 0.5 ? 'confidence-medium' : 
+                                      'confidence-low';
+                
+                // Get category names
+                const trueCategoryName = getCategoryName(result.true_category_id);
+                const predictedCategoryName = result.predicted_category_name || getCategoryName(result.predicted_category_id);
+                
+                // Title with tooltip
+                const titleText = result.title || '-';
+                const titleEscaped = escapeHtml(titleText);
+                const titleShort = titleText.length > 50 ? titleText.substring(0, 50) + '...' : titleText;
+                
+                row.innerHTML = `
+                    <td class="title-cell">
+                        ${escapeHtml(titleShort)}
+                        <div class="title-full">${titleEscaped}</div>
+                    </td>
+                    <td>${escapeHtml(trueCategoryName)}</td>
+                    <td>${escapeHtml(predictedCategoryName)}</td>
+                    <td>
+                        ${result.is_error ? '<span style="color: #e74c3c;">N/A</span>' : `
+                        <div class="confidence-bar">
+                            <div class="confidence-fill ${confidenceClass}" style="width: ${result.confidence * 100}%"></div>
+                        </div>
+                        <span style="margin-left: 10px;">${(result.confidence * 100).toFixed(1)}%</span>
+                        `}
+                    </td>
+                    <td class="${result.is_correct ? 'correct' : 'incorrect'}">
+                        ${result.is_error ? '✗' : (result.is_correct ? '✓' : '✗')}
+                    </td>
+                    <td>${result.is_error ? '-' : result.processing_time_ms.toFixed(1)}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update statistics
+        function updateStats() {
+            if (results.length === 0) return;
+            
+            // Filter out errors for accuracy calculation
+            const validResults = results.filter(r => !r.is_error);
+            const correct = validResults.filter(r => r.is_correct).length;
+            const accuracy = validResults.length > 0 ? (correct / validResults.length) * 100 : 0;
+            const avgConfidence = validResults.length > 0 ? 
+                validResults.reduce((sum, r) => sum + r.confidence, 0) / validResults.length : 0;
+            const avgLatency = validResults.length > 0 ? 
+                validResults.reduce((sum, r) => sum + r.processing_time_ms, 0) / validResults.length : 0;
+            
+            document.getElementById('statTested').textContent = results.length;
+            document.getElementById('statAccuracy').textContent = validResults.length > 0 ? accuracy.toFixed(1) + '%' : '-';
+            document.getElementById('statConfidence').textContent = validResults.length > 0 ? (avgConfidence * 100).toFixed(1) + '%' : '-';
+            document.getElementById('statLatency').textContent = validResults.length > 0 ? avgLatency.toFixed(1) : '-';
+        }
+
+        // Export to JSON
+        function exportJSON() {
+            if (results.length === 0) {
+                alert('No results to export');
+                return;
+            }
+            
+            const dataStr = JSON.stringify(results, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `predictions_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Clear results
+        function clearResults() {
+            results = [];
+            document.getElementById('resultsBody').innerHTML = '';
+            document.getElementById('statsSection').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            updateStats();
+        }
+
+        // Afficher un message de statut
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+            element.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    element.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Initialiser avec l'URL par défaut
+        document.getElementById('apiUrl').addEventListener('change', function() {
+            apiUrl = this.value.trim();
+        });
+
+        // Charger les noms de catégories au chargement de la page si l'API est déjà configurée
+        window.addEventListener('load', function() {
+            if (apiUrl) {
+                loadCategoryNames();
+            }
+        });
+    </script>
+</body>
+</html>
+

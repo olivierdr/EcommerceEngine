@@ -1,27 +1,28 @@
 #!/bin/bash
-# Installation script with CUDA dependency handling
+# Script d'installation avec gestion des dépendances CUDA
 
 cd "$(dirname "$0")"
 
-# Activate venv or create it
+# Activer le venv ou le créer
 if [ ! -d "venv" ]; then
-    echo "Creating venv..."
+    echo "Création du venv..."
     python3 -m venv venv
 fi
 
 source venv/bin/activate
 
-# Upgrade pip
+# Mettre à jour pip
 pip install --upgrade pip setuptools wheel
 
-# Install PyTorch CPU-only first to avoid CUDA issues
-echo "Installing PyTorch (CPU-only)..."
+# Installer PyTorch CPU-only d'abord pour éviter les problèmes CUDA
+echo "Installation de PyTorch (CPU-only)..."
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# Install other dependencies
-echo "Installing other dependencies..."
+# Installer les autres dépendances
+echo "Installation des autres dépendances..."
 pip install -r requirements.txt
 
-echo "Installation completed!"
+echo "✓ Installation terminée !"
 echo ""
-echo "To activate venv: source venv/bin/activate"
+echo "Pour activer le venv : source venv/bin/activate"
+

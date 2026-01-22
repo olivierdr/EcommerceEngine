@@ -1,32 +1,30 @@
-# E-commerce Classification
+# Classification E-commerce
 
-## Objective
+## Objectif
 
-Automatic classification of e-commerce products into leaf categories based on available information (title, description, brand, color). The project starts with a comprehensive audit of the existing taxonomy to understand its structure and identify potential inconsistencies, then explores a flat classification approach (baseline) with identification of uncertain products for human validation.
+Classification automatique de produits e-commerce dans des catégories feuilles à partir des informations disponibles (title, description, brand, color). Le projet commence par un audit complet de la taxonomie existante pour comprendre sa structure et identifier d'éventuelles incohérences, puis explore une approche de classification flat (baseline) avec identification des produits incertains pour validation humaine.
 
-**For a detailed understanding of strategic choices, results and analyses, see the [SYNTHESIS.md](SYNTHESIS.md) file.**
+**Pour une compréhension approfondie des choix stratégiques, résultats détaillés et analyses, consultez le fichier [SYNTHESE.md](SYNTHESE.md).**
 
-## Project Structure
+## Structure du Projet
 
 ```
 ClassificationEcommerce/
-├── data/                          # Input data (CSV)
+├── data/                          # Données d'entrée (CSV)
 │   ├── .gitkeep
-│   ├── trainset.csv              # Training data (30,520 products)
-│   └── testset.csv               # Test data (7,631 products)
+│   ├── trainset.csv              # Données d'entraînement (30,520 produits)
+│   └── testset.csv               # Données de test (7,631 produits)
 │
-├── src/                           # Source code
-│   ├── audit_taxonomy.py         # Step 1: Taxonomy audit
-│   ├── train.py                  # Step 2: Classifier training
-│   ├── evaluate.py               # Step 2: Evaluation and analyses
-│   └── api.py                    # FastAPI with GCP observability
+├── src/                           # Code source
+│   ├── audit_taxonomy.py         # Étape 1 : Audit de la taxonomie
+│   └── classify_flat.py          # Classification flat (baseline)
 │
-├── results/                       # Generated results
-│   ├── audit/                    # Audit results
+├── results/                       # Résultats générés
+│   ├── audit/                    # Résultats de l'audit
 │   │   ├── category_names.json
 │   │   ├── low_coherence_categories.json
 │   │   └── high_coherence_categories.json
-│   └── classification/           # Classification results
+│   └── classification/           # Résultats de la classification
 │       ├── flat_model.pkl
 │       ├── certain_categories_analysis.json
 │       ├── uncertain_categories_analysis.json
@@ -34,115 +32,87 @@ ClassificationEcommerce/
 │
 ├── .cache/                        # Cache (embeddings, etc.)
 ├── requirements.txt
-├── README.md                      # This file
-└── SYNTHESIS.md                   # Detailed synthesis of approaches and results
+├── README.md                      # Ce fichier
+└── SYNTHESE.md                    # Synthèse détaillée des approches et résultats
 ```
 
 ## Installation
 
-1. **Create a virtual environment** (recommended):
+1. **Créer un environnement virtuel** (recommandé) :
 ```bash
 cd ./ClassificationEcommerce/
 python3 -m venv venv
 source venv/bin/activate 
 ```
 
-2. **Install dependencies**:
+2. **Installer les dépendances** :
 ```bash
 pip install -r requirements.txt
 ```
 
-**Important:** Place your `trainset.csv` and `testset.csv` files in the `data/` folder before running the scripts.
+**Important :** Placez vos fichiers `trainset.csv` et `testset.csv` dans le dossier `data/` avant d'exécuter les scripts.
 
-## Methodological Approach
+## Approche Méthodologique
 
-### Step 1: Taxonomy Audit
+### Étape 1 : Audit de la Taxonomie
 
-Before any classification, a thorough analysis of the dataset allows to:
-- Understand the hierarchical structure (depth, number of categories per level)
-- Detect structural inconsistencies in `category_path`
-- Evaluate semantic coherence of products within each category
+Avant toute classification, une analyse approfondie du jeu de données permet de :
+- Comprendre la structure hiérarchique (profondeur, nombre de catégories par niveau)
+- Détecter les incohérences structurelles dans les `category_path`
+- Évaluer la cohérence sémantique des produits au sein de chaque catégorie
 
-**Execution:**
+**Exécution :**
 ```bash
 python3 src/audit_taxonomy.py
 ```
 
-**Results:**
-- 100 leaf categories identified
-- Variable depth: 3 to 8 levels (median: 6)
-- No structural inconsistencies detected
-- 32 categories with low semantic coherence (< 0.4)
-- 68 categories with high semantic coherence (>= 0.4)
-- Category names generated from frequent keywords
+**Résultats :**
+- 100 catégories feuilles identifiées
+- Profondeur variable : 3 à 8 niveaux (médiane : 6)
+- Aucune incohérence structurelle détectée
+- 32 catégories avec faible cohérence sémantique (< 0.4)
+- 68 catégories avec haute cohérence sémantique (≥ 0.4)
+- Génération de noms de catégories à partir des mots-clés fréquents
 
-**Generated files (in `results/audit/`):**
-- `category_names.json`: Generated names for each category with examples
-- `low_coherence_categories.json`: Categories with low semantic coherence
-- `high_coherence_categories.json`: Categories with high semantic coherence
+**Fichiers générés (dans `results/audit/`) :**
+- `category_names.json` : Noms générés pour chaque catégorie avec exemples
+- `low_coherence_categories.json` : Catégories à faible cohérence sémantique
+- `high_coherence_categories.json` : Catégories à haute cohérence sémantique
 
-### Step 2: Flat Classification (Baseline)
+### Étape 2 : Classification Flat (Baseline)
 
-**Principle:** Direct prediction of the leaf category among 100 classes, with identification of uncertain products based on confidence scores.
+**Principe :** Prédiction directe de la catégorie feuille parmi les 100 classes, avec identification des produits incertains basée sur les scores de confiance.
 
-**Architecture:**
-- Embeddings: Multilingual model `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions)
-- Classifier: Logistic Regression
-- Features: Concatenation of title + description
+**Architecture :**
+- Embeddings : Modèle multilingue `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions)
+- Classifieur : Logistic Regression
+- Features : Concaténation de title + description
 
-**Execution:**
+**Exécution :**
 ```bash
-python3 src/train.py      # Training
-python3 src/evaluate.py   # Evaluation and analyses
+python3 src/classify_flat.py
 ```
 
-**Results:**
-- Accuracy: 77.47% on test set
-- 75.5% of products with confidence >= 0.5 (certain)
-- 24.5% of products with confidence < 0.5 (uncertain, require human validation)
+**Résultats :**
+- Accuracy : 77.47% sur le test set
+- 75.5% des produits avec confiance ≥ 0.5 (certains)
+- 24.5% des produits avec confiance < 0.5 (incertains, nécessitent validation humaine)
 
-**Generated files (in `results/classification/`):**
-- `flat_model.pkl`: Saved trained model
-- `certain_categories_analysis.json`: Top 10 categories with certain products
-- `uncertain_categories_analysis.json`: Top 10 problematic categories
-- `confusion_patterns.json`: Top 10 confusion patterns between categories
+**Fichiers générés (dans `results/classification/`) :**
+- `flat_model.pkl` : Modèle entraîné sauvegardé
+- `certain_categories_analysis.json` : Top 10 catégories avec produits certains
+- `uncertain_categories_analysis.json` : Top 10 catégories problématiques
+- `confusion_patterns.json` : Top 10 patterns de confusion entre catégories
 
-### Step 3: API with Observability (Optional)
-
-**Principle:** REST API for production classification with OpenTelemetry instrumentation for Cloud Monitoring and Cloud Trace.
-
-**Local execution:**
-```bash
-./start_api.sh
-```
-
-The API will be accessible at `http://localhost:8000` with:
-- `/classify`: Classification endpoint (POST)
-- `/health`: Health check
-- `/metrics`: Prometheus metrics
-- `/docs`: Swagger documentation
-
-**Cloud Run deployment:**
-```bash
-export GOOGLE_CLOUD_PROJECT=your-project-id
-./deploy_cloud_run.sh
-```
-
-**Observability:**
-- Metrics exported to Cloud Monitoring (latency, throughput, errors, confidence)
-- Traces exported to Cloud Trace (detailed spans for embedding, classification)
-- Configurable dashboards and alerts (see [CLOUD_MONITORING.md](CLOUD_MONITORING.md))
-
-## Technologies Used
+## Technologies Utilisées
 
 - **Python 3**
-- **scikit-learn**: Classification (Logistic Regression)
-- **sentence-transformers**: Multilingual embeddings (FR/DE/EN)
-- **pandas**: Data manipulation
-- **numpy**: Numerical computations
-- **FastAPI**: REST API (optional)
-- **OpenTelemetry**: Observability (Cloud Monitoring, Cloud Trace)
+- **scikit-learn** : Classification (Logistic Regression)
+- **sentence-transformers** : Embeddings multilingues (FR/DE/EN)
+- **pandas** : Manipulation de données
+- **numpy** : Calculs numériques
 
-## Additional Documentation
+## Documentation Complémentaire
 
-For detailed analysis of strategic choices, complete results, error examples and improvement axes, see the **[SYNTHESIS.md](SYNTHESIS.md)** file.
+Pour une analyse détaillée des choix stratégiques, des résultats complets, des exemples d'erreurs et des axes d'amélioration, consultez le fichier **[SYNTHESE.md](SYNTHESE.md)**.
+

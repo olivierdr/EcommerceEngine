@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
@@ -138,6 +139,15 @@ app = FastAPI(
     title="E-commerce Classification API",
     description="Product classification API with observability",
     version="1.0.0"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En production, spécifier les origines autorisées
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Load model at startup
@@ -284,6 +294,36 @@ async def get_metrics():
     )
 
 
+@app.get("/testset")
+async def get_testset():
+    """Serve testset.csv file"""
+    testset_path = Path(__file__).parent.parent / 'data' / 'testset.csv'
+    if not testset_path.exists():
+        raise HTTPException(status_code=404, detail="Testset file not found")
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=testset_path,
+        media_type='text/csv',
+        filename='testset.csv'
+    )
+
+
+@app.get("/category-names")
+async def get_category_names():
+    """Serve category names JSON file"""
+    names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
+    if not names_path.exists():
+        raise HTTPException(status_code=404, detail="Category names file not found")
+    
+    with open(names_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        # Convert to simple dict if needed
+        if data and isinstance(list(data.values())[0], dict):
+            return {cat_id: info['name'] for cat_id, info in data.items()}
+        return data
+
+
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -294,6 +334,8 @@ async def root():
             "classify": "/classify (POST)",
             "health": "/health (GET)",
             "metrics": "/metrics (GET)",
+            "testset": "/testset (GET)",
+            "category-names": "/category-names (GET)",
             "docs": "/docs"
         }
     }
