@@ -348,7 +348,10 @@
             <h2>Results</h2>
             <div class="controls">
                 <button onclick="exportJSON()">Export JSON</button>
+                <button onclick="exportToBigQuery()" id="bigqueryBtn">Export to BigQuery</button>
+                <input type="text" id="bigqueryUrl" placeholder="Cloud Function URL" style="width: 400px;">
             </div>
+            <div class="status" id="bigqueryStatus"></div>
             <div style="overflow-x: auto;">
                 <table id="resultsTable">
                     <thead>
@@ -823,6 +826,80 @@
             document.getElementById('statsSection').style.display = 'none';
             document.getElementById('resultsSection').style.display = 'none';
             updateStats();
+        }
+
+        // Export to BigQuery
+        async function exportToBigQuery() {
+            if (results.length === 0) {
+                showStatus('bigqueryStatus', 'No results to export', 'error');
+                return;
+            }
+
+            const functionUrl = document.getElementById('bigqueryUrl').value.trim();
+            if (!functionUrl) {
+                showStatus('bigqueryStatus', 'Please enter the Cloud Function URL', 'error');
+                return;
+            }
+
+            // Filter out error entries
+            const validResults = results.filter(r => !r.is_error);
+            if (validResults.length === 0) {
+                showStatus('bigqueryStatus', 'No valid results to export', 'error');
+                return;
+            }
+
+            // Prepare data for BigQuery
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            const predictions = validResults.map(result => ({
+                product_id: result.product_id || '',
+                title: result.title || '',
+                description: result.description || '',
+                true_category_id: result.true_category_id || '',
+                true_category_name: getCategoryName(result.true_category_id),
+                true_category_path: result.true_category_path || '',
+                predicted_category_id: result.predicted_category_id || '',
+                predicted_category_name: result.predicted_category_name || '',
+                predicted_category_path: result.predicted_category_path || '',
+                confidence: result.confidence || 0.0,
+                is_correct: result.is_correct || false,
+                processing_time_ms: result.processing_time_ms || 0.0,
+                request_time_ms: result.request_time_ms || 0.0,
+                api_url: apiUrl || ''
+            }));
+
+            // Disable button and show loading
+            const btn = document.getElementById('bigqueryBtn');
+            btn.disabled = true;
+            btn.textContent = 'Exporting...';
+            showStatus('bigqueryStatus', `Exporting ${predictions.length} predictions to BigQuery...`, 'info');
+
+            try {
+                const response = await fetch(functionUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        predictions: predictions
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || data.message || `HTTP ${response.status}`);
+                }
+
+                showStatus('bigqueryStatus', `✓ Successfully exported ${data.rows_inserted || predictions.length} predictions to BigQuery`, 'success');
+                btn.textContent = 'Export to BigQuery';
+                btn.disabled = false;
+
+            } catch (error) {
+                console.error('BigQuery export error:', error);
+                showStatus('bigqueryStatus', `✗ Export failed: ${error.message}`, 'error');
+                btn.textContent = 'Export to BigQuery';
+                btn.disabled = false;
+            }
         }
 
         // Afficher un message de statut
