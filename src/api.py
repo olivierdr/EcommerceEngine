@@ -311,16 +311,14 @@ async def get_testset():
 
 @app.get("/category-names")
 async def get_category_names():
-    """Serve category names JSON file"""
+    """Serve category names JSON file with examples"""
     names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
     if not names_path.exists():
         raise HTTPException(status_code=404, detail="Category names file not found")
     
     with open(names_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-        # Convert to simple dict if needed
-        if data and isinstance(list(data.values())[0], dict):
-            return {cat_id: info['name'] for cat_id, info in data.items()}
+        # Return full data with examples if available
         return data
 
 
