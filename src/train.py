@@ -1,297 +1,177 @@
 """
-E-commerce product classifier training
+E-commerce product classifier training - Main script
 """
-
-import pandas as pd
-import numpy as np
-import pickle
-import json
-import re
-import time
-from datetime import datetime
+import argparse
+import sys
 from pathlib import Path
-from collections import Counter
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import LabelEncoder
-from sentence_transformers import SentenceTransformer
-from google.cloud import aiplatform
-from google.cloud import bigquery
-import warnings
-warnings.filterwarnings('ignore')
+from datetime import datetime
 
-# Vertex AI Configuration
-PROJECT_ID = "master-ai-cloud"
-REGION = "europe-west1"
-EXPERIMENT_NAME = "ecommerce-classification-v1"
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
-class FlatClassifier:
-    """Flat classifier for direct leaf category prediction"""
-    
-    def __init__(self, embedding_model_name='paraphrase-multilingual-MiniLM-L12-v2'):
-        """Initialize embedding model"""
-        print("Loading embedding model...")
-        self.embedding_model = SentenceTransformer(embedding_model_name)
-        self.embedding_model_name = embedding_model_name
-        self.classifier = None
-        self.label_encoder = None
-        self.df_train = None
-        self.X_train = None
-        self.cat_to_path = {}
-        
-    def prepare_features(self, df, show_progress=True, cache_path=None):
-        """Prepare text features (title + description)"""
-        if cache_path and Path(cache_path).exists():
-            if show_progress:
-                print(f"Loading embeddings from cache...")
-            return np.load(cache_path)
-        
-        if show_progress:
-            print("Preparing features...")
-        texts = (df['title'].fillna('') + ' ' + df['description'].fillna('')).str.strip()
-        text_embeddings = self.embedding_model.encode(
-            texts.tolist(), 
-            show_progress_bar=show_progress,
-            batch_size=128
-        )
-        
-        if cache_path:
-            Path(cache_path).parent.mkdir(parents=True, exist_ok=True)
-            np.save(cache_path, text_embeddings)
-            if show_progress:
-                print(f"   Cache saved: {cache_path}")
-        
-        if show_progress:
-            print(f"   {len(texts):,} texts encoded to {text_embeddings.shape[1]}-dimensional vectors")
-        return text_embeddings
-    
-    def train(self, train_path):
-        """Train model on training set"""
-        print("\n" + "="*60)
-        print("TRAINING - Flat Classification")
-        print("="*60)
-        
-        print("\nLoading training data...")
-        df_train = pd.read_csv(train_path)
-        print(f"   {len(df_train):,} products loaded")
-        
-        self.df_train = df_train
-        self.X_train = self.prepare_features(df_train, show_progress=True)
-        y_train = df_train['category_id'].values
-        
-        self.label_encoder = LabelEncoder()
-        y_train_encoded = self.label_encoder.fit_transform(y_train)
-        
-        print(f"\nStatistics:")
-        print(f"   Number of categories: {len(self.label_encoder.classes_)}")
-        print(f"   Embedding dimension: {self.X_train.shape[1]}")
-        
-        print("\nTraining classifier (Logistic Regression)...")
-        self.classifier = LogisticRegression(max_iter=1000, random_state=42, n_jobs=-1)
-        self.classifier.fit(self.X_train, y_train_encoded)
-        print("   Model trained")
-        
-        self.cat_to_path = dict(zip(df_train['category_id'], df_train['category_path']))
-        
-        return self
-    
-    def predict(self, df):
-        """Predict categories for a dataframe"""
-        X = self.prepare_features(df, show_progress=False)
-        y_pred_encoded = self.classifier.predict(X)
-        return self.label_encoder.inverse_transform(y_pred_encoded)
-    
-    def predict_proba(self, df):
-        """Return prediction probabilities"""
-        X = self.prepare_features(df, show_progress=False)
-        return self.classifier.predict_proba(X)
-    
-    def predict_with_confidence(self, df):
-        """Predict with confidence scores"""
-        X = self.prepare_features(df, show_progress=False)
-        y_pred_encoded = self.classifier.predict(X)
-        y_pred = self.label_encoder.inverse_transform(y_pred_encoded)
-        y_pred_proba = self.classifier.predict_proba(X)
-        return y_pred, np.max(y_pred_proba, axis=1)
-    
-    def save(self, model_path):
-        """Save model"""
-        model_path = Path(model_path)
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(model_path, 'wb') as f:
-            pickle.dump({
-                'classifier': self.classifier,
-                'label_encoder': self.label_encoder,
-                'embedding_model_name': self.embedding_model_name,
-                'cat_to_path': self.cat_to_path
-            }, f)
-        print(f"Model saved: {model_path}")
-    
-    @classmethod
-    def load(cls, model_path):
-        """Load a saved model"""
-        with open(model_path, 'rb') as f:
-            data = pickle.load(f)
-        
-        classifier = cls(embedding_model_name=data['embedding_model_name'])
-        classifier.classifier = data['classifier']
-        classifier.label_encoder = data['label_encoder']
-        classifier.cat_to_path = data.get('cat_to_path', {})
-        return classifier
+from src.utils.config import PROJECT_ID, REGION, EXPERIMENT_NAME, GCS_BUCKET
+from src.data.loader import load_dataset
+from src.training.trainer import train_model
+from src.training.evaluator import evaluate_model
+from src.tracking.vertex_ai import init_vertex_ai, start_run, log_params, log_metrics, end_run
+from src.tracking.gcs import upload_model, upload_metadata
+from src.tracking.bigquery import save_all_metadata
+from src.utils.category_names import generate_category_names
 
 
-def generate_category_names(df):
-    """Generate simple names for each category based on frequent keywords"""
-    print("\nGenerating category names...")
-    
-    stopwords = {'le', 'la', 'les', 'de', 'du', 'des', 'et', 'ou', 'pour', 'avec', 'sans', 
-                'der', 'die', 'das', 'und', 'oder', 'für', 'mit', 'ohne',
-                'the', 'a', 'an', 'and', 'or', 'for', 'with', 'without',
-                'à', 'd', 'l', 'un', 'une', 'en', 'sur', 'par', 'dans'}
-    
-    category_data = {}
-    
-    for cat_id in df['category_id'].unique():
-        cat_products = df[df['category_id'] == cat_id]
-        titles = cat_products['title'].fillna('').astype(str).tolist()
-        
-        words = []
-        for title in titles:
-            title_words = re.findall(r'\b[a-zA-ZÀ-ÿ]{3,}\b', title.lower())
-            words.extend([w for w in title_words if w not in stopwords])
-        
-        if words:
-            word_counts = Counter(words)
-            top_words = [word for word, _ in word_counts.most_common(3)]
-            category_name = ' '.join(top_words).title()
-        else:
-            category_name = "Unknown Category"
-        
-        example_titles = [t[:80] for t in titles[:5] if t.strip()]
-        
-        category_data[cat_id] = {
-            'name': category_name,
-            'example_titles': example_titles
-        }
-    
-    output_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(category_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"   {len(category_data)} names generated")
-    return category_data
-
-
-def load_category_names():
-    """Load category names from category_names.json"""
-    names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
-    if names_path.exists():
-        with open(names_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if isinstance(list(data.values())[0], dict):
-                return {cat_id: data[cat_id]['name'] for cat_id in data}
-            return data
-    return {}
-
-
-def main():
+def main(version="v1.0.0", dataset_version="v1.0", local_only=False):
     print("\n" + "="*60)
     print("CLASSIFIER TRAINING")
     print("="*60)
-    
-    # Initialize Vertex AI
-    print("\nInitializing Vertex AI...")
-    run_id = None
-    try:
-        # Initialize with experiment
-        aiplatform.init(project=PROJECT_ID, location=REGION, experiment=EXPERIMENT_NAME)
-        
-        # Create experiment run
-        print(f"Creating run in experiment '{EXPERIMENT_NAME}'...")
-        run_id = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        aiplatform.start_run(run=run_id)
-        print(f"✓ Run created: {run_id}")
-        
-        # Log hyperparameters
-        hyperparameters = {
-            "max_iter": 1000,
-            "random_state": 42,
-            "solver": "lbfgs",
-            "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2"
-        }
-        print(f"\nLogging hyperparameters...")
-        aiplatform.log_params(hyperparameters)
-        print("✓ Hyperparameters logged")
-    except Exception as e:
-        print(f"Warning: Could not initialize Vertex AI: {e}")
-        print("Continuing without Vertex AI tracking...")
-        run_id = None
+    print(f"Model version: {version}")
+    print(f"Dataset version: {dataset_version}")
+    print(f"Local only: {local_only}")
+    print("="*60)
     
     base_path = Path(__file__).parent.parent
-    train_path = base_path / 'data' / 'trainset.csv'
-    val_path = base_path / 'data' / 'valset.csv'
-    model_path = base_path / 'results' / 'classification' / 'flat_model.pkl'
     
-    if not train_path.exists():
-        print(f"File not found: {train_path}")
-        if run_id is not None:
+    # Initialize Vertex AI (skip if local_only)
+    run_id = None
+    hyperparameters = {
+        "max_iter": 1000,
+        "random_state": 42,
+        "solver": "lbfgs",
+        "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2"
+    }
+    
+    if not local_only:
+        print("\nInitializing Vertex AI...")
+        try:
+            init_vertex_ai()
+            run_id = start_run()
+            print(f"✓ Run created: {run_id}")
+            
+            print(f"\nLogging hyperparameters...")
+            log_params(hyperparameters)
+            print("✓ Hyperparameters logged")
+        except Exception as e:
+            print(f"Warning: Could not initialize Vertex AI: {e}")
+            print("Continuing without Vertex AI tracking...")
+            run_id = None
+    else:
+        run_id = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        print("\nRunning in local-only mode (no Vertex AI, GCS, or BigQuery)")
+    
+    # Load datasets
+    datasets = load_dataset(dataset_version, local_only=local_only, base_path=base_path)
+    
+    if 'train' not in datasets:
+        print(f"Error: Training dataset not found")
+        if run_id and not local_only:
             try:
-                aiplatform.end_run()
+                end_run()
             except:
                 pass
         return None
     
-    # Train
-    training_start = time.time()
-    classifier = FlatClassifier()
-    classifier.train(train_path)
-    training_time = time.time() - training_start
+    df_train = datasets['train']
+    df_val = datasets.get('val', None)
+    df_test = datasets.get('test', None)
+    
+    # Train model
+    print("\n" + "="*60)
+    print("TRAINING")
+    print("="*60)
+    classifier, training_time = train_model(df_train, hyperparameters)
     
     # Generate category names
     generate_category_names(classifier.df_train)
     
-    # Evaluate on validation set
-    print("\nEvaluating on validation set...")
-    if val_path.exists():
-        from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-        df_val = pd.read_csv(val_path)
-        y_pred_val, conf_val = classifier.predict_with_confidence(df_val)
-        y_true_val = df_val['category_id'].values
-        
-        val_accuracy = accuracy_score(y_true_val, y_pred_val)
-        val_prec, val_rec, val_f1, _ = precision_recall_fscore_support(
-            y_true_val, y_pred_val, average='weighted', zero_division=0
-        )
-        
-        print(f"   Validation Accuracy: {val_accuracy:.4f}")
-        print(f"   Validation F1: {val_f1:.4f}")
-        
-        # Log metrics to Vertex AI
-        if run_id is not None:
-            try:
-                print("\nLogging metrics to Vertex AI...")
-                aiplatform.log_metrics({
-                    "val_accuracy": val_accuracy,
-                    "val_precision": val_prec,
-                    "val_recall": val_rec,
-                    "val_f1": val_f1,
-                    "training_time_seconds": training_time,
-                    "avg_confidence": float(np.mean(conf_val))
-                })
-                print("✓ Metrics logged")
-            except Exception as e:
-                print(f"Warning: Could not log metrics: {e}")
+    # Evaluate model
+    metrics = {}
+    if df_val is not None:
+        metrics = evaluate_model(classifier, df_train=df_train, df_val=df_val)
     else:
-        print("   Validation set not found, skipping evaluation")
+        print("\nNo validation set available, skipping evaluation")
+        metrics = {
+            "train_samples": len(df_train),
+            "val_samples": 0,
+            "test_samples": len(df_test) if df_test is not None else 0
+        }
     
-    # Save
+    # Add sample counts to metrics
+    metrics['train_samples'] = len(df_train)
+    metrics['val_samples'] = len(df_val) if df_val is not None else 0
+    metrics['test_samples'] = len(df_test) if df_test is not None else 0
+    
+    # Save locally
+    model_path = base_path / 'results' / 'classification' / 'flat_model.pkl'
     classifier.save(model_path)
+    print(f"✓ Model saved locally: {model_path}")
+    
+    # Upload to GCS and save to BigQuery
+    model_gcs_path = None
+    if not local_only:
+        print("\n" + "="*60)
+        print("UPLOADING TO GCS AND BIGQUERY")
+        print("="*60)
+        
+        try:
+            # Calculate model size
+            model_size_mb = model_path.stat().st_size / (1024 * 1024)
+            
+            # Upload model to GCS
+            print(f"\nUploading model to GCS...")
+            model_gcs_path = upload_model(model_path, version)
+            print(f"✓ Model uploaded: {model_gcs_path}")
+            
+            # Upload metadata
+            metadata = {
+                "version": version,
+                "dataset_version": dataset_version,
+                "run_id": run_id,
+                "created_at": datetime.now().isoformat(),
+                "hyperparameters": hyperparameters,
+                "metrics": metrics,
+                "training_time_seconds": training_time
+            }
+            upload_metadata(metadata, version, base_path=base_path / 'results' / 'classification')
+            print(f"✓ Metadata uploaded")
+            
+            # Log metrics to Vertex AI
+            if run_id:
+                try:
+                    print("\nLogging metrics to Vertex AI...")
+                    log_metrics({
+                        "val_accuracy": metrics.get("val_accuracy", 0),
+                        "val_precision": metrics.get("val_precision", 0),
+                        "val_recall": metrics.get("val_recall", 0),
+                        "val_f1": metrics.get("val_f1", 0),
+                        "training_time_seconds": training_time,
+                        "avg_confidence": metrics.get("avg_confidence", 0)
+                    })
+                    print("✓ Metrics logged")
+                except Exception as e:
+                    print(f"Warning: Could not log metrics: {e}")
+            
+            # Save to BigQuery
+            print(f"\nSaving to BigQuery...")
+            metrics_count = save_all_metadata(
+                run_id=run_id,
+                model_version=version,
+                dataset_version=dataset_version,
+                metrics=metrics,
+                hyperparameters=hyperparameters,
+                training_time=training_time,
+                model_size_mb=model_size_mb,
+                model_gcs_path=model_gcs_path
+            )
+            print(f"✓ Saved to BigQuery ({metrics_count} metrics)")
+            
+        except Exception as e:
+            print(f"Warning: Could not upload to GCS/BigQuery: {e}")
+            import traceback
+            traceback.print_exc()
     
     # End run
-    if run_id is not None:
+    if run_id and not local_only:
         try:
-            aiplatform.end_run()
+            end_run()
             print(f"\n✓ Run completed: {run_id}")
         except Exception as e:
             print(f"Warning: Could not end run: {e}")
@@ -304,4 +184,18 @@ def main():
 
 
 if __name__ == '__main__':
-    classifier = main()
+    parser = argparse.ArgumentParser(description='Train e-commerce product classifier')
+    parser.add_argument('--version', type=str, default='v1.0.0', 
+                       help='Model version (e.g., v1.0.0, v1.1.0)')
+    parser.add_argument('--dataset-version', type=str, default='v1.0',
+                       help='Dataset version (e.g., v1.0, v1.1)')
+    parser.add_argument('--local-only', action='store_true',
+                       help='Run in local-only mode (no GCS, BigQuery, or Vertex AI)')
+    
+    args = parser.parse_args()
+    
+    classifier = main(
+        version=args.version,
+        dataset_version=args.dataset_version,
+        local_only=args.local_only
+    )
