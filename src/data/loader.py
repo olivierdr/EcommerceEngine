@@ -23,10 +23,16 @@ def load_dataset_from_local(dataset_version, base_path=None):
     datasets = {}
     if train_path.exists():
         datasets['train'] = pd.read_csv(train_path)
+        print(f"   ✓ Loaded trainset.csv from local ({len(datasets['train']):,} rows)")
     if val_path.exists():
         datasets['val'] = pd.read_csv(val_path)
+        print(f"   ✓ Loaded valset.csv from local ({len(datasets['val']):,} rows)")
     if test_path.exists():
         datasets['test'] = pd.read_csv(test_path)
+        print(f"   ✓ Loaded testset.csv from local ({len(datasets['test']):,} rows)")
+    
+    if datasets:
+        print(f"✓ Successfully loaded {len(datasets)} dataset(s) from local: {list(datasets.keys())}")
     
     return datasets
 
@@ -54,8 +60,12 @@ def load_dataset_from_gcs(dataset_version, bucket_name=None):
                 datasets[split] = pd.read_csv(tmp_file.name)
                 import os
                 os.unlink(tmp_file.name)
+            print(f"   ✓ Loaded {split}set.csv from GCS ({len(datasets[split]):,} rows)")
         else:
             print(f"   Warning: {gcs_path} not found in GCS")
+    
+    if datasets:
+        print(f"✓ Successfully loaded {len(datasets)} dataset(s) from GCS: {list(datasets.keys())}")
     
     return datasets
 
