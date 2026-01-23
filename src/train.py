@@ -7,13 +7,22 @@ import numpy as np
 import pickle
 import json
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 from collections import Counter
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder
 from sentence_transformers import SentenceTransformer
+from google.cloud import aiplatform
+from google.cloud import bigquery
 import warnings
 warnings.filterwarnings('ignore')
+
+# Vertex AI Configuration
+PROJECT_ID = "master-ai-cloud"
+REGION = "europe-west1"
+EXPERIMENT_NAME = "ecommerce-classification-v1"
 
 
 class FlatClassifier:
@@ -191,23 +200,101 @@ def main():
     print("CLASSIFIER TRAINING")
     print("="*60)
     
+    # Initialize Vertex AI
+    print("\nInitializing Vertex AI...")
+    run_id = None
+    try:
+        # Initialize with experiment
+        aiplatform.init(project=PROJECT_ID, location=REGION, experiment=EXPERIMENT_NAME)
+        
+        # Create experiment run
+        print(f"Creating run in experiment '{EXPERIMENT_NAME}'...")
+        run_id = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        aiplatform.start_run(run=run_id)
+        print(f"✓ Run created: {run_id}")
+        
+        # Log hyperparameters
+        hyperparameters = {
+            "max_iter": 1000,
+            "random_state": 42,
+            "solver": "lbfgs",
+            "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2"
+        }
+        print(f"\nLogging hyperparameters...")
+        aiplatform.log_params(hyperparameters)
+        print("✓ Hyperparameters logged")
+    except Exception as e:
+        print(f"Warning: Could not initialize Vertex AI: {e}")
+        print("Continuing without Vertex AI tracking...")
+        run_id = None
+    
     base_path = Path(__file__).parent.parent
     train_path = base_path / 'data' / 'trainset.csv'
+    val_path = base_path / 'data' / 'valset.csv'
     model_path = base_path / 'results' / 'classification' / 'flat_model.pkl'
     
     if not train_path.exists():
         print(f"File not found: {train_path}")
+        if run_id is not None:
+            try:
+                aiplatform.end_run()
+            except:
+                pass
         return None
     
     # Train
+    training_start = time.time()
     classifier = FlatClassifier()
     classifier.train(train_path)
+    training_time = time.time() - training_start
     
     # Generate category names
     generate_category_names(classifier.df_train)
     
+    # Evaluate on validation set
+    print("\nEvaluating on validation set...")
+    if val_path.exists():
+        from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+        df_val = pd.read_csv(val_path)
+        y_pred_val, conf_val = classifier.predict_with_confidence(df_val)
+        y_true_val = df_val['category_id'].values
+        
+        val_accuracy = accuracy_score(y_true_val, y_pred_val)
+        val_prec, val_rec, val_f1, _ = precision_recall_fscore_support(
+            y_true_val, y_pred_val, average='weighted', zero_division=0
+        )
+        
+        print(f"   Validation Accuracy: {val_accuracy:.4f}")
+        print(f"   Validation F1: {val_f1:.4f}")
+        
+        # Log metrics to Vertex AI
+        if run_id is not None:
+            try:
+                print("\nLogging metrics to Vertex AI...")
+                aiplatform.log_metrics({
+                    "val_accuracy": val_accuracy,
+                    "val_precision": val_prec,
+                    "val_recall": val_rec,
+                    "val_f1": val_f1,
+                    "training_time_seconds": training_time,
+                    "avg_confidence": float(np.mean(conf_val))
+                })
+                print("✓ Metrics logged")
+            except Exception as e:
+                print(f"Warning: Could not log metrics: {e}")
+    else:
+        print("   Validation set not found, skipping evaluation")
+    
     # Save
     classifier.save(model_path)
+    
+    # End run
+    if run_id is not None:
+        try:
+            aiplatform.end_run()
+            print(f"\n✓ Run completed: {run_id}")
+        except Exception as e:
+            print(f"Warning: Could not end run: {e}")
     
     print("\n" + "="*60)
     print("Training completed")

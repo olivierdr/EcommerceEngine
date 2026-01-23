@@ -350,6 +350,7 @@
                 <button onclick="exportJSON()">Export JSON</button>
                 <button onclick="exportToBigQuery()" id="bigqueryBtn">Export to BigQuery</button>
                 <input type="text" id="bigqueryUrl" placeholder="Cloud Function URL" style="width: 400px;">
+                <input type="password" id="bigqueryApiKey" placeholder="API Key (optional)" style="width: 200px;">
             </div>
             <div class="status" id="bigqueryStatus"></div>
             <div style="overflow-x: auto;">
@@ -874,11 +875,20 @@
             showStatus('bigqueryStatus', `Exporting ${predictions.length} predictions to BigQuery...`, 'info');
 
             try {
+                // Prepare headers
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                
+                // Add API key if provided
+                const apiKey = document.getElementById('bigqueryApiKey').value.trim();
+                if (apiKey) {
+                    headers['X-API-Key'] = apiKey;
+                }
+                
                 const response = await fetch(functionUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: headers,
                     body: JSON.stringify({
                         predictions: predictions
                     })

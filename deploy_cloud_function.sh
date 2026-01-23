@@ -37,6 +37,17 @@ echo "Region: $REGION"
 cd cloud_function
 
 echo -e "${YELLOW}Deploying function...${NC}"
+
+# Check if API key secret exists
+SECRET_NAME="bigquery-export-api-key"
+if gcloud secrets describe $SECRET_NAME --project=$PROJECT_ID &>/dev/null; then
+    echo -e "${GREEN}✓ API key secret found - authentication will be enforced by function code${NC}"
+else
+    echo -e "${YELLOW}⚠ No API key secret found - function will allow unauthenticated access${NC}"
+    echo -e "${YELLOW}   Run ./cloud_function/setup_auth.sh to set up authentication${NC}"
+fi
+
+# Always allow unauthenticated at Cloud Run level - our code handles API key verification
 gcloud functions deploy $FUNCTION_NAME \
   --gen2 \
   --runtime=$RUNTIME \
@@ -45,7 +56,7 @@ gcloud functions deploy $FUNCTION_NAME \
   --entry-point=export_to_bigquery \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars BIGQUERY_DATASET=Ecommerce,BIGQUERY_TABLE=predictions \
+  --set-env-vars BIGQUERY_DATASET=Ecommerce,BIGQUERY_TABLE=predictions,API_KEY_SECRET_NAME=$SECRET_NAME \
   --memory=$MEMORY \
   --timeout=$TIMEOUT
 
