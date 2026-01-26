@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+---
+
+# Workflow de test après modification de code
+
+## 1. Exécution des tests existants
+Après chaque modification de code :
+- Exécute TOUS les tests liés au code modifié
+- Vérifie qu'aucune régression n'a été introduite
+- Si des tests échouent : corrige et reteste avant de continuer
+
+## 2. Création de tests (seulement si pertinent)
+Ne crée de nouveaux tests QUE si :
+- ✅ Le code contient de la logique métier importante
+- ✅ Le code est critique pour l'application (auth, paiement, calculs...)
+- ✅ Le code est complexe ou difficile à valider manuellement
+- ✅ Le code sera réutilisé à plusieurs endroits
+
+Ne crée PAS de tests pour :
+- ❌ Code trivial (getters/setters simples, constantes)
+- ❌ Configuration pure (fichiers config, routes simples)
+- ❌ Composants UI simples sans logique
+- ❌ Code jetable ou prototypes
+- ❌ Modifications cosmétiques (style, textes, images)
+
+Si un test est nécessaire, teste AU MINIMUM :
+- Le cas nominal principal
+- Un cas d'erreur évident (si applicable)
+
+## 3. Rapport de test
+Partage TOUJOURS :
+- ✅ Nombre de tests exécutés + résultats
+- ✅ Nouveaux tests créés (si pertinent)
+- ❌ En cas d'échec : raison + correction
+
+## 4. Cycle de correction automatique
+En cas d'échec de test :
+1. Analyse et corrige le code
+2. Re-teste intégralement
+3. Répète jusqu'au succès
+4. Pas besoin de demander validation entre chaque itération
