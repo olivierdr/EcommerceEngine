@@ -29,18 +29,18 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
       for (let i = 1; i < lines.length && products.length < 100; i++) {
         const values = lines[i].split(',');
         if (values.length >= headers.length) {
-          const product: Product = {};
+          const row: Partial<Product> = {};
           headers.forEach((header, idx) => {
             const key = header.trim().toLowerCase();
-            if (key === 'product_id') product.product_id = values[idx]?.trim();
-            if (key === 'title') product.title = values[idx]?.trim() || '';
-            if (key === 'description') product.description = values[idx]?.trim();
-            if (key === 'category_id') product.category_id = values[idx]?.trim();
-            if (key === 'category_name') product.category_name = values[idx]?.trim();
-            if (key === 'category_path') product.category_path = values[idx]?.trim();
+            if (key === 'product_id') row.product_id = values[idx]?.trim();
+            if (key === 'title') row.title = values[idx]?.trim() || '';
+            if (key === 'description') row.description = values[idx]?.trim();
+            if (key === 'category_id') row.category_id = values[idx]?.trim();
+            if (key === 'category_name') row.category_name = values[idx]?.trim();
+            if (key === 'category_path') row.category_path = values[idx]?.trim();
           });
-          if (product.title) {
-            products.push(product);
+          if (row.title) {
+            products.push(row as Product);
           }
         }
       }
@@ -89,7 +89,7 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
         const latency = performance.now() - startTime;
         totalLatency += latency;
 
-        const isCorrect = product.category_id && data.category_id === product.category_id;
+        const isCorrect = Boolean(product.category_id && data.category_id === product.category_id);
         if (isCorrect) correctCount++;
 
         results.push({

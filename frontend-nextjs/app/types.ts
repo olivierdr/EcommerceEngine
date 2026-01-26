@@ -39,3 +39,4 @@ export interface Stats {
   avg_latency_ms: number;
 }
 
+

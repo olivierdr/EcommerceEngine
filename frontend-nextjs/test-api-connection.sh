@@ -57,3 +57,4 @@ echo ""
 echo "All API endpoints are working! You can now start the Next.js frontend."
 echo "Run: npm run dev"
 
+
