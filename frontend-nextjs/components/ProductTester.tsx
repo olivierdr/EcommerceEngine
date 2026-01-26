@@ -3,52 +3,108 @@
 import { useState } from 'react';
 import { Product, PredictionResult } from '@/app/types';
 
+/** Parse CSV with quoted fields (commas and newlines inside quotes). Returns [headers, ...rows]. */
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (c === '"') {
+        inQuotes = false;
+      } else {
+        field += c;
+      }
+    } else {
+      if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field.trim());
+        field = '';
+      } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && next === '\n') i++;
+        row.push(field.trim());
+        field = '';
+        if (row.some((cell) => cell.length > 0)) rows.push(row);
+        row = [];
+      } else {
+        field += c;
+      }
+    }
+  }
+  if (field || row.length > 0) {
+    row.push(field.trim());
+    if (row.some((cell) => cell.length > 0)) rows.push(row);
+  }
+  return rows;
+}
+
 interface ProductTesterProps {
   apiUrl: string;
   onResults: (results: PredictionResult[]) => void;
   onStats: (stats: { total_tested: number; accuracy: number; avg_confidence: number; avg_latency_ms: number }) => void;
 }
 
+type LoadStatus = null | 'loading' | { count: number } | 'empty' | { error: string };
+
 export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps) => {
+  const baseUrl = (apiUrl ?? '').replace(/\/$/, '') || 'http://localhost:8000';
   const [loading, setLoading] = useState(false);
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>(null);
   const [testProducts, setTestProducts] = useState<Product[]>([]);
   const [manualTitle, setManualTitle] = useState('');
   const [manualDescription, setManualDescription] = useState('');
 
   const loadTestSet = async () => {
+    const url = `${baseUrl}/testset`;
+    setLoadStatus('loading');
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`${apiUrl}/testset`);
-      if (!response.ok) throw new Error('Failed to load testset');
-      
-      const text = await response.text();
-      const lines = text.split('\n').filter(line => line.trim());
-      const headers = lines[0].split(',');
-      
-      const products: Product[] = [];
-      for (let i = 1; i < lines.length && products.length < 100; i++) {
-        const values = lines[i].split(',');
-        if (values.length >= headers.length) {
-          const row: Partial<Product> = {};
-          headers.forEach((header, idx) => {
-            const key = header.trim().toLowerCase();
-            if (key === 'product_id') row.product_id = values[idx]?.trim();
-            if (key === 'title') row.title = values[idx]?.trim() || '';
-            if (key === 'description') row.description = values[idx]?.trim();
-            if (key === 'category_id') row.category_id = values[idx]?.trim();
-            if (key === 'category_name') row.category_name = values[idx]?.trim();
-            if (key === 'category_path') row.category_path = values[idx]?.trim();
-          });
-          if (row.title) {
-            products.push(row as Product);
-          }
-        }
+      const response = await fetch(url);
+      if (!response.ok) {
+        const body = (await response.text()).slice(0, 200);
+        throw new Error(`Testset: ${response.status} ${body || ''}`);
       }
-      
+      const text = await response.text();
+      const parsed = parseCSV(text);
+      if (parsed.length < 2) {
+        setTestProducts([]);
+        setLoadStatus('empty');
+        return;
+      }
+      const headers = parsed[0].map((h) => h.trim().toLowerCase());
+      const products: Product[] = [];
+      for (let i = 1; i < parsed.length && products.length < 100; i++) {
+        const values = parsed[i];
+        const row: Partial<Product> = {};
+        headers.forEach((key, idx) => {
+          const v = values[idx]?.trim() ?? '';
+          if (key === 'product_id') row.product_id = v;
+          else if (key === 'title') row.title = v;
+          else if (key === 'description') row.description = v;
+          else if (key === 'category_id') row.category_id = v;
+          else if (key === 'category_name') row.category_name = v;
+          else if (key === 'category_path') row.category_path = v;
+        });
+        if (row.title) products.push(row as Product);
+      }
       setTestProducts(products);
+      setLoadStatus(products.length > 0 ? { count: products.length } : 'empty');
     } catch (error) {
+      const isNetwork =
+        error instanceof TypeError || (error instanceof Error && /fetch|network/i.test(error.message));
+      const msg = isNetwork
+        ? `Impossible de joindre l'API à ${url}. Vérifiez que l'API tourne (ex. ./start_local.sh).`
+        : (error instanceof Error ? error.message : 'Échec chargement testset');
       console.error('Error loading testset:', error);
-      alert('Failed to load testset');
+      setLoadStatus({ error: msg });
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -72,7 +128,7 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
     for (const product of selected) {
       try {
         const startTime = performance.now();
-        const response = await fetch(`${apiUrl}/classify`, {
+        const response = await fetch(`${baseUrl}/classify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -138,7 +194,7 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
     setLoading(true);
     try {
       const startTime = performance.now();
-      const response = await fetch(`${apiUrl}/classify`, {
+      const response = await fetch(`${baseUrl}/classify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -148,7 +204,14 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        let detail = '';
+        try {
+          const b = await response.json() as { detail?: string };
+          detail = b.detail ?? '';
+        } catch {
+          detail = (await response.text()).slice(0, 100);
+        }
+        throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
       }
 
       const data = await response.json();
@@ -176,7 +239,8 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
       setManualDescription('');
     } catch (error) {
       console.error('Error classifying product:', error);
-      alert('Failed to classify product');
+      const msg = error instanceof Error ? error.message : 'Failed to classify product';
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -187,24 +251,47 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
       <h2 className="text-2xl font-bold text-gray-800">Test Products</h2>
 
       {/* Load Testset */}
-      <div className="flex gap-4 items-end">
-        <button
-          onClick={loadTestSet}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Loading...' : 'Load Testset'}
-        </button>
-        <button
-          onClick={() => testRandomProducts(10)}
-          disabled={loading || testProducts.length === 0}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Testing...' : 'Test 10 Random Products'}
-        </button>
-        <span className="text-sm text-gray-600">
-          {testProducts.length > 0 && `${testProducts.length} products loaded`}
-        </span>
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-4 items-center">
+          <button
+            type="button"
+            onClick={loadTestSet}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Loading...' : 'Load Testset'}
+          </button>
+          <button
+            type="button"
+            onClick={() => testRandomProducts(10)}
+            disabled={loading || testProducts.length === 0}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Testing...' : 'Test 10 Random Products'}
+          </button>
+          {loadStatus === 'loading' && (
+            <span className="text-sm text-blue-600" role="status">Loading testset...</span>
+          )}
+          {loadStatus && loadStatus !== 'loading' && (
+            <span
+              className={`text-sm ${
+                typeof loadStatus === 'object' && 'error' in loadStatus
+                  ? 'text-red-600'
+                  : loadStatus === 'empty'
+                    ? 'text-amber-600'
+                    : 'text-green-700'
+              }`}
+            >
+              {loadStatus === 'empty'
+                ? 'No products in testset'
+                : typeof loadStatus === 'object' && 'count' in loadStatus
+                  ? `${loadStatus.count} products loaded`
+                  : typeof loadStatus === 'object' && 'error' in loadStatus
+                    ? loadStatus.error
+                    : null}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Manual Test */}

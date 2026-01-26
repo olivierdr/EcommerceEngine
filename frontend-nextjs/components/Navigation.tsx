@@ -7,14 +7,16 @@ export const Navigation = () => {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-white shadow-md mb-8">
+    <nav className="bg-white border-b border-gray-200 shadow-sm" aria-label="Main">
       <div className="container mx-auto px-4">
-        <div className="flex space-x-6">
+        <div className="flex gap-1" role="tablist">
           <Link
             href="/"
-            className={`py-4 px-2 border-b-2 ${
+            role="tab"
+            aria-selected={pathname === '/'}
+            className={`py-4 px-4 border-b-2 font-medium transition-colors ${
               pathname === '/'
-                ? 'border-blue-600 text-blue-600 font-semibold'
+                ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
             }`}
           >
@@ -22,9 +24,11 @@ export const Navigation = () => {
           </Link>
           <Link
             href="/categories"
-            className={`py-4 px-2 border-b-2 ${
+            role="tab"
+            aria-selected={pathname === '/categories'}
+            className={`py-4 px-4 border-b-2 font-medium transition-colors ${
               pathname === '/categories'
-                ? 'border-blue-600 text-blue-600 font-semibold'
+                ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
             }`}
           >

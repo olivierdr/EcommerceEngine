@@ -2,23 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { CategoryData } from '../types';
-
-const DEFAULT_API_URL = 'http://localhost:8000';
+import { DEFAULT_API_URL } from '../config';
 
 export default function CategoriesPage() {
-  const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
   const [categories, setCategories] = useState<CategoryData>({});
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     loadCategories();
-  }, [apiUrl]);
+  }, []);
 
   const loadCategories = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${apiUrl}/category-names`);
+      const response = await fetch(`${DEFAULT_API_URL}/category-names`);
       if (!response.ok) throw new Error('Failed to load categories');
       
       const data = await response.json();
@@ -51,20 +49,6 @@ export default function CategoriesPage() {
           </p>
         </header>
 
-        {/* API URL Configuration */}
-        <div className="mb-6 bg-white rounded-lg shadow-md p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            API URL
-          </label>
-          <input
-            type="text"
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            placeholder="http://localhost:8000"
-            className="w-full md:w-96 px-3 py-2 bg-gray-50 border-2 border-gray-400 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500"
-          />
-        </div>
-
         {/* Search */}
         <div className="mb-6 bg-white rounded-lg shadow-md p-4">
           <input
@@ -72,7 +56,7 @@ export default function CategoriesPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search categories by name, ID, or example..."
-            className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-400 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 

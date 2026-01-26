@@ -2,21 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Thème clair fixe : pas de prefers-color-scheme pour garder le layout cohérent */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #f3f4f6;
+  --foreground: #111827;
 }
 
 body {
-  color: var(--foreground);
   background: var(--background);
+  color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
 

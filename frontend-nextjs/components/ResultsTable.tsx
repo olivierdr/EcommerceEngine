@@ -4,9 +4,11 @@ import { PredictionResult } from '@/app/types';
 
 interface ResultsTableProps {
   results: PredictionResult[];
+  /** Map category_id → name for readable "Category name" column */
+  categoryNames?: Record<string, string>;
 }
 
-export const ResultsTable = ({ results }: ResultsTableProps) => {
+export const ResultsTable = ({ results, categoryNames = {} }: ResultsTableProps) => {
   if (results.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6 text-center text-gray-500">
@@ -26,7 +28,7 @@ export const ResultsTable = ({ results }: ResultsTableProps) => {
                 Title
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                True Category
+                Category name
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Predicted Category
@@ -51,30 +53,35 @@ export const ResultsTable = ({ results }: ResultsTableProps) => {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  {result.category_name ? (
-                    <span className="text-gray-900 font-medium">{result.category_name}</span>
+                  {result.category_id ?? result.category_name ?? result.category_path ? (
+                    <span className="text-gray-900 font-medium">
+                      {categoryNames[result.category_id ?? ''] ?? result.category_name ?? result.category_id ?? result.category_path}
+                    </span>
                   ) : (
-                    <span className="text-gray-400 italic">Manual test (no true category)</span>
+                    <span className="text-gray-400 italic">Manual test (no expected category)</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                  {result.predicted_category_name}
+                  {result.predicted_category_name ?? result.predicted_category_id ?? '—'}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <div className="flex items-center">
-                    <span className="mr-2">{(result.confidence * 100).toFixed(1)}%</span>
-                    <div className="w-24 bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${
-                          result.confidence > 0.7
-                            ? 'bg-green-500'
-                            : result.confidence > 0.5
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                        }`}
-                        style={{ width: `${result.confidence * 100}%` }}
-                      />
-                    </div>
+                    {(() => {
+                      const conf = typeof result.confidence === 'number' ? result.confidence : 0;
+                      return (
+                        <>
+                          <span className="mr-2">{conf > 0 ? `${(conf * 100).toFixed(1)}%` : '—'}</span>
+                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${
+                                conf > 0.7 ? 'bg-green-500' : conf > 0.5 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${Math.min(100, conf * 100)}%` }}
+                            />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm">
@@ -87,7 +94,7 @@ export const ResultsTable = ({ results }: ResultsTableProps) => {
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {result.latency_ms.toFixed(0)}
+                  {typeof result.latency_ms === 'number' ? result.latency_ms.toFixed(0) : '—'}
                 </td>
               </tr>
             ))}

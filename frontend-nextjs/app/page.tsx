@@ -6,77 +6,67 @@ import { ResultsTable } from '@/components/ResultsTable';
 import { StatsCards } from '@/components/StatsCards';
 import { ConfidenceDistribution, CategoryAccuracy, LatencyChart, CorrectnessChart } from '@/components/Charts';
 import { PredictionResult, Stats } from './types';
+import { DEFAULT_API_URL } from './config';
 
-const DEFAULT_API_URL = 'http://localhost:8000';
+const DEFAULT_STATS: Stats = {
+  total_tested: 0,
+  accuracy: 0,
+  avg_confidence: 0,
+  avg_latency_ms: 0,
+};
+
 const STORAGE_KEY_RESULTS = 'ecommerce-classification-results';
 const STORAGE_KEY_STATS = 'ecommerce-classification-stats';
-const STORAGE_KEY_API_URL = 'ecommerce-classification-api-url';
 
 export default function Home() {
-  // Load from localStorage on mount
-  const [apiUrl, setApiUrl] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(STORAGE_KEY_API_URL) || DEFAULT_API_URL;
-    }
-    return DEFAULT_API_URL;
-  });
-  
-  const [results, setResults] = useState<PredictionResult[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY_RESULTS);
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          return [];
-        }
-      }
-    }
-    return [];
-  });
-  
-  const [stats, setStats] = useState<Stats>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY_STATS);
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          return {
-            total_tested: 0,
-            accuracy: 0,
-            avg_confidence: 0,
-            avg_latency_ms: 0,
-          };
-        }
-      }
-    }
-    return {
-      total_tested: 0,
-      accuracy: 0,
-      avg_confidence: 0,
-      avg_latency_ms: 0,
-    };
-  });
+  const [results, setResults] = useState<PredictionResult[]>([]);
+  const [stats, setStats] = useState<Stats>(DEFAULT_STATS);
+  const [categoryNames, setCategoryNames] = useState<Record<string, string>>({});
 
-  // Save to localStorage whenever results or stats change
+  // Charger les noms de catégories (id → nom) pour affichage lisible
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(results));
+    const base = (DEFAULT_API_URL || '').replace(/\/$/, '') || 'http://localhost:8000';
+    fetch(`${base}/category-names`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data: Record<string, { name?: string }>) => {
+        const map: Record<string, string> = {};
+        if (data && typeof data === 'object') {
+          for (const [id, info] of Object.entries(data)) {
+            map[id] = info?.name ?? id;
+          }
+        }
+        setCategoryNames(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Charger depuis localStorage après hydratation (évite Hydration failed)
+  useEffect(() => {
+    const savedResults = localStorage.getItem(STORAGE_KEY_RESULTS);
+    if (savedResults) {
+      try {
+        setResults(JSON.parse(savedResults));
+      } catch {
+        // ignore
+      }
     }
+    const savedStats = localStorage.getItem(STORAGE_KEY_STATS);
+    if (savedStats) {
+      try {
+        setStats(JSON.parse(savedStats));
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(results));
   }, [results]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(stats));
-    }
+    localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(stats));
   }, [stats]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY_API_URL, apiUrl);
-    }
-  }, [apiUrl]);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -90,20 +80,6 @@ export default function Home() {
           </p>
         </header>
 
-        {/* API URL Configuration */}
-        <div className="mb-6 bg-white rounded-lg shadow-md p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            API URL
-          </label>
-          <input
-            type="text"
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            placeholder="http://localhost:8000"
-            className="w-full md:w-96 px-3 py-2 bg-gray-50 border-2 border-gray-400 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500"
-          />
-        </div>
-
         {/* Stats Cards */}
         {stats.total_tested > 0 && (
           <div className="mb-6">
@@ -112,16 +88,9 @@ export default function Home() {
               <button
                 onClick={() => {
                   setResults([]);
-                  setStats({
-                    total_tested: 0,
-                    accuracy: 0,
-                    avg_confidence: 0,
-                    avg_latency_ms: 0,
-                  });
-                  if (typeof window !== 'undefined') {
-                    localStorage.removeItem(STORAGE_KEY_RESULTS);
-                    localStorage.removeItem(STORAGE_KEY_STATS);
-                  }
+                  setStats(DEFAULT_STATS);
+                  localStorage.removeItem(STORAGE_KEY_RESULTS);
+                  localStorage.removeItem(STORAGE_KEY_STATS);
                 }}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
               >
@@ -135,7 +104,7 @@ export default function Home() {
         {/* Product Tester */}
         <div className="mb-6">
           <ProductTester
-            apiUrl={apiUrl}
+            apiUrl={DEFAULT_API_URL}
             onResults={setResults}
             onStats={setStats}
           />
@@ -153,7 +122,7 @@ export default function Home() {
 
         {/* Results Table */}
         <div>
-          <ResultsTable results={results} />
+          <ResultsTable results={results} categoryNames={categoryNames} />
         </div>
       </div>
     </div>
