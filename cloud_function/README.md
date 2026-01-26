@@ -112,3 +112,4 @@ gcloud functions deploy export-predictions-to-bigquery \
 - `BIGQUERY_DATASET`: BigQuery dataset name (default: `Ecommerce`)
 - `BIGQUERY_TABLE`: BigQuery table name (default: `predictions`)
 
+
