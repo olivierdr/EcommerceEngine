@@ -1,4 +1,4 @@
-# Files to ignore for Cloud Build (data/testset.csv is included for /testset API)
+# Files to ignore for Cloud Build (testset lives in src/data/, included via COPY src/)
 __pycache__/
 *.pyc
 *.pyo

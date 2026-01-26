@@ -16,6 +16,10 @@ env/
 .idea/
 .DS_Store
 
+# Env (ne pas pousser sur GitHub)
+.env.production
+.env*.local
+
 # Cache et modèles ML
 .cache/
 *.pkl
@@ -23,6 +27,8 @@ env/
 # Données - ignorer les fichiers CSV dans data/ mais garder le dossier
 data/*.csv
 data/*.CSV
+
+src/data/*.csv
 
 # Fichiers générés par les scripts
 *.json
