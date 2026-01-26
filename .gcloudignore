@@ -1,5 +1,4 @@
-# Files to ignore for Cloud Build
-
+# Files to ignore for Cloud Build (data/testset.csv is included for /testset API)
 __pycache__/
 *.pyc
 *.pyo
@@ -7,7 +6,6 @@ venv/
 .venv
 .git/
 .gitignore
-data/
 .cache/
 .DS_Store
 *.log

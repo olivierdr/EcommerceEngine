@@ -141,11 +141,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# Configure CORS (allow_credentials=False when using "*" so browser accepts it)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, spécifier les origines autorisées
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

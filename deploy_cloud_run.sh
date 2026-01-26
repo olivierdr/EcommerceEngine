@@ -29,6 +29,12 @@ if [ ! -f "results/classification/flat_model.pkl" ]; then
     exit 1
 fi
 
+# Check testset exists (needed for Load test dataset on the frontend)
+if [ ! -f "data/testset.csv" ]; then
+    echo "WARNING: data/testset.csv not found. /testset will return 404 on Cloud Run."
+    echo "   Add data/testset.csv if you want to load the test dataset from the deployed frontend."
+fi
+
 # Check/create Artifact Registry repository
 echo "Checking Artifact Registry repository..."
 if ! gcloud artifacts repositories describe ${REPO_NAME} --location=${REGION} --project=${PROJECT_ID} &>/dev/null; then
