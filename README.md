@@ -1,267 +1,272 @@
-# Classification E-commerce
+# E-commerce Classification
 
-Système complet de classification automatique de produits e-commerce avec API REST et interface web interactive. Le projet combine un modèle de machine learning pour la classification, une API FastAPI pour l'exposition des services, et un frontend Next.js pour l'interaction utilisateur.
+Complete system for automatic e-commerce product classification with REST API and interactive web interface. The project combines a machine learning model for classification, a FastAPI for service exposure, and a Next.js frontend for user interaction.
 
-## Origine du projet
+## Project Origin
 
-Ce projet a été développé pour répondre au besoin de classification automatique de produits e-commerce dans une taxonomie hiérarchique complexe. L'objectif principal est d'améliorer la visibilité des produits et d'assurer une expérience utilisateur cohérente en classant automatiquement les produits dans les bonnes catégories à partir de leurs informations textuelles (titre, description, marque, couleur).
+This project was developed to address the need for automatic e-commerce product classification in a complex hierarchical taxonomy. The main objective is to improve product visibility and ensure a consistent user experience by automatically classifying products into the correct categories based on their textual information (title, description, brand, color).
 
-Le projet s'articule autour de plusieurs besoins identifiés :
+The project addresses several identified needs:
 
-- **Classification automatique** : Prédire la catégorie feuille d'un produit parmi 100 catégories possibles à partir de ses informations textuelles
-- **API REST** : Exposer le modèle de classification via une API pour permettre l'intégration dans d'autres systèmes
-- **Interface web interactive** : Fournir une interface utilisateur pour tester le modèle, charger des datasets, visualiser les résultats et analyser les performances
-- **Versioning des modèles et données** : Mettre en place un système de versioning pour suivre l'évolution des modèles entraînés et des datasets utilisés
-- **Déploiement en production** : Déployer l'API sur Cloud Run et le frontend sur Firebase Hosting pour une disponibilité publique
+- **Automatic classification**: Predict a product's leaf category among 100 possible categories from its textual information
+- **REST API**: Expose the classification model via an API to enable integration into other systems
+- **Interactive web interface**: Provide a user interface to test the model, load datasets, visualize results, and analyze performance
+- **Model and data versioning**: Implement a versioning system to track the evolution of trained models and datasets used
+- **Production deployment**: Deploy the API on Cloud Run and the frontend on Firebase Hosting for public availability
 
 ## Architecture
 
-### Vue d'ensemble
+### Overview
 
-Le projet suit une architecture modulaire avec séparation claire entre le backend (API Python/FastAPI) et le frontend (Next.js/React), avec intégration des services Google Cloud Platform pour le stockage et le déploiement.
+The project follows a modular architecture with clear separation between backend (Python/FastAPI API) and frontend (Next.js/React), with integration of Google Cloud Platform services for storage and deployment.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Frontend (Next.js)                       │
-│  - Interface utilisateur interactive                        │
-│  - Tests de produits                                        │
-│  - Visualisation des résultats                              │
-│  - Déployé sur Firebase Hosting                            │
+│  - Interactive user interface                               │
+│  - Product testing                                          │
+│  - Results visualization                                    │
+│  - Deployed on Firebase Hosting                             │
 └──────────────────────┬──────────────────────────────────────┘
                        │ HTTP/REST
 ┌──────────────────────▼──────────────────────────────────────┐
 │                    API (FastAPI)                            │
-│  - Endpoint /classify pour la classification                │
-│  - Endpoint /testset pour charger le dataset                │
-│  - Endpoint /category-names pour les métadonnées            │
-│  - Métriques Prometheus                                     │
-│  - Déployé sur Cloud Run                                    │
+│  - /classify endpoint for classification                    │
+│  - /testset endpoint to load dataset                        │
+│  - /category-names endpoint for metadata                     │
+│  - Prometheus metrics                                       │
+│  - Deployed on Cloud Run                                    │
 └──────────────────────┬──────────────────────────────────────┘
                        │
         ┌──────────────┼──────────────┐
         │              │              │
 ┌───────▼──────┐ ┌────▼─────┐ ┌─────▼──────┐
-│   Modèle ML  │ │  GCS      │ │  BigQuery  │
+│   ML Model   │ │  GCS      │ │  BigQuery  │
 │  (Pickle)    │ │ (Storage) │ │ (Tracking) │
 │              │ │           │ │            │
-│ - flat_model │ │ - Modèles │ │ - Métriques│
+│ - flat_model │ │ - Models  │ │ - Metrics  │
 │ - Embeddings │ │ - Datasets│ │ - Versions │
 └──────────────┘ └───────────┘ └────────────┘
 ```
 
-### Composants principaux
+### Main Components
 
-#### Backend (API FastAPI)
+#### Backend (FastAPI)
 
-- **ClassificationModel** : Classe wrapper pour charger et utiliser le modèle de classification
-  - Support du chargement depuis le système de fichiers local ou Google Cloud Storage (GCS)
-  - Gestion automatique des embeddings avec sentence-transformers
-  - Prédiction avec scores de confiance
+- **ClassificationModel**: Wrapper class to load and use the classification model
+  - Support for loading from local filesystem or Google Cloud Storage (GCS)
+  - Automatic embedding management with sentence-transformers
+  - Prediction with confidence scores
 
-- **Endpoints REST** :
-  - `POST /classify` : Classification d'un produit (titre + description)
-  - `GET /testset` : Récupération du dataset de test (CSV)
-  - `GET /category-names` : Métadonnées des catégories avec exemples
-  - `GET /health` : Vérification de l'état de santé
-  - `GET /metrics` : Métriques Prometheus
-  - `GET /docs` : Documentation interactive Swagger
+- **REST Endpoints**:
+  - `POST /classify`: Classify a product (title + description)
+  - `GET /testset`: Retrieve test dataset (CSV)
+  - `GET /category-names`: Category metadata with examples
+  - `GET /health`: Health check
+  - `GET /metrics`: Prometheus metrics
+  - `GET /docs`: Interactive Swagger documentation
 
-- **Métriques Prometheus** :
-  - Latence des requêtes (`api_request_duration_seconds`)
+- **Prometheus Metrics**:
+  - Request latency (`api_request_duration_seconds`)
   - Throughput (`api_requests_total`)
-  - Taux d'erreur (`api_errors_total`)
-  - Score de confiance moyen (`api_confidence_score_average`)
-  - Temps d'inférence (`api_inference_duration_seconds`)
+  - Error rate (`api_errors_total`)
+  - Average confidence score (`api_confidence_score_average`)
+  - Inference time (`api_inference_duration_seconds`)
 
 #### Frontend (Next.js)
 
-- **Pages principales** :
-  - `/` : Page d'accueil avec testeur de produits et visualisation des résultats
-  - `/categories` : Navigation dans toutes les catégories avec exemples
+- **Main Pages**:
+  - `/`: Home page with product tester and results visualization
+  - `/categories`: Browse all categories with examples
 
-- **Composants** :
-  - `ProductTester` : Interface pour tester des produits individuellement ou charger un dataset
-  - `ResultsTable` : Tableau des résultats avec colonnes True Category, Predicted Category, Confidence, etc.
-  - `StatsCards` : Cartes statistiques (accuracy, confiance moyenne, latence moyenne)
-  - `Charts` : Graphiques de distribution de confiance, précision par catégorie, latence
+- **Components**:
+  - `ProductTester`: Interface to test products individually or load a dataset
+  - `ResultsTable`: Results table with True Category, Predicted Category, Confidence columns, etc.
+  - `StatsCards`: Statistics cards (accuracy, average confidence, average latency)
+  - `Charts`: Confidence distribution charts, accuracy by category, latency
 
-- **Fonctionnalités** :
-  - Chargement du testset depuis l'API
-  - Test de produits aléatoires (10 par défaut)
-  - Test manuel de produits individuels
-  - Sauvegarde des résultats dans localStorage
-  - Affichage des noms de catégories lisibles (résolution depuis l'API)
+- **Features**:
+  - Load testset from API
+  - Test random products (10 by default)
+  - Manual testing of individual products
+  - Save results in localStorage
+  - Display readable category names (resolved from API)
 
-#### Stockage et versioning
+#### Storage and Versioning
 
-- **Google Cloud Storage (GCS)** :
-  - Stockage des modèles versionnés : `gs://bucket/models/{version}/model.pkl`
-  - Stockage des datasets versionnés : `gs://bucket/datasets/{version}/{split}set.csv`
-  - Stockage des métadonnées : `gs://bucket/models/{version}/category_names.json`
+- **Google Cloud Storage (GCS)**:
+  - Versioned model storage: `gs://bucket/models/{version}/model.pkl`
+  - Versioned dataset storage: `gs://bucket/datasets/{version}/{split}set.csv`
+  - Metadata storage: `gs://bucket/models/{version}/category_names.json`
+  - Latest version cache: `gs://bucket/models/LATEST_VERSION.txt`
 
-- **BigQuery** :
-  - Tracking des versions de modèles
-  - Métriques d'entraînement et d'évaluation
-  - Historique des performances
+- **BigQuery**:
+  - Model version tracking
+  - Training and evaluation metrics
+  - Performance history
 
-- **Versioning** :
-  - Format de version : `v1.0.0`, `v1.1.0`, etc.
-  - Chaque version inclut le modèle, les métadonnées et les datasets associés
-  - Traçabilité complète via BigQuery
+- **Versioning**:
+  - Version format: `v1.0.0`, `v1.1.0`, etc. (Semantic Versioning)
+  - Each version includes the model, metadata, and associated datasets
+  - Complete traceability via BigQuery
+  - Support for `MODEL_VERSION=latest` to automatically point to the latest version
+  - `LATEST_VERSION.txt` file in GCS for fast cache of the most recent version
 
-### Environnements
+### Environments
 
-Le projet supporte deux modes de fonctionnement :
+The project supports two operating modes:
 
-- **Mode local** (`MODEL_SOURCE=local`) :
-  - Charge le modèle depuis `results/classification/flat_model.pkl`
-  - Charge les catégories depuis `results/audit/category_names.json`
-  - Utilisé pour le développement et les tests locaux
+- **Local mode** (`MODEL_SOURCE=local`):
+  - Loads model from `results/classification/flat_model.pkl`
+  - Loads categories from `results/audit/category_names.json`
+  - Used for development and local testing
 
-- **Mode production** (`MODEL_SOURCE=gcs`) :
-  - Charge le modèle depuis Google Cloud Storage
-  - Version du modèle configurée via `MODEL_VERSION` (défaut: `v1.0.0`)
-  - Utilisé pour les déploiements Cloud Run et la production
+- **Production mode** (`MODEL_SOURCE=gcs`):
+  - Loads model from Google Cloud Storage
+  - Model version configured via `MODEL_VERSION` (default: `latest`)
+  - `MODEL_VERSION=latest` automatically resolves to the latest available version in GCS
+  - Used for Cloud Run deployments and production
 
-## Structure du projet
+## Project Structure
 
 ```
 ClassificationEcommerce/
-├── src/                          # Code source Python
-│   ├── api.py                    # API FastAPI principale
-│   ├── train.py                  # Script d'entraînement avec versioning
-│   ├── evaluate.py               # Évaluation du modèle
-│   ├── audit_taxonomy.py         # Audit de la taxonomie
-│   ├── data/                     # Utilitaires de chargement de données
-│   │   ├── loader.py             # Chargement local/GCS
-│   │   └── testset.csv           # Dataset de test
-│   ├── models/                   # Modèles de classification
-│   │   └── flat_classifier.py    # Classifieur flat (baseline)
-│   ├── training/                 # Utilitaires d'entraînement
+├── src/                          # Python source code
+│   ├── api.py                    # Main FastAPI
+│   ├── train.py                  # Training script with versioning
+│   ├── evaluate.py               # Model evaluation
+│   ├── audit_taxonomy.py         # Taxonomy audit
+│   ├── data/                     # Data loading utilities
+│   │   ├── loader.py             # Local/GCS loading
+│   │   └── testset.csv           # Test dataset
+│   ├── models/                   # Classification models
+│   │   └── flat_classifier.py    # Flat classifier (baseline)
+│   ├── training/                 # Training utilities
 │   │   ├── trainer.py
 │   │   └── evaluator.py
-│   ├── tracking/                 # Tracking et versioning
-│   │   ├── gcs.py                # Upload/download GCS
-│   │   ├── bigquery.py           # Tracking BigQuery
-│   │   └── vertex_ai.py         # Intégration Vertex AI
-│   └── utils/                    # Utilitaires
-│       ├── config.py             # Configuration GCP
-│       └── category_names.py     # Gestion des noms de catégories
+│   ├── tracking/                 # Tracking and versioning
+│   │   ├── gcs.py                # GCS upload/download
+│   │   ├── bigquery.py           # BigQuery tracking
+│   │   └── vertex_ai.py          # Vertex AI integration
+│   └── utils/                    # Utilities
+│       ├── config.py             # GCP configuration
+│       └── category_names.py     # Category name management
 │
-├── frontend-nextjs/              # Frontend Next.js
-│   ├── app/                      # Pages App Router
-│   │   ├── page.tsx              # Page d'accueil
-│   │   ├── categories/           # Page catégories
-│   │   ├── config.ts             # Configuration API URL
-│   │   └── types.ts              # Types TypeScript
-│   ├── components/               # Composants React
+├── frontend-nextjs/              # Next.js frontend
+│   ├── app/                      # App Router pages
+│   │   ├── page.tsx              # Home page
+│   │   ├── categories/           # Categories page
+│   │   ├── config.ts             # API URL configuration
+│   │   └── types.ts              # TypeScript types
+│   ├── components/               # React components
 │   │   ├── ProductTester.tsx
 │   │   ├── ResultsTable.tsx
 │   │   ├── StatsCards.tsx
 │   │   └── Charts.tsx
-│   ├── scripts/                  # Scripts de test
+│   ├── scripts/                  # Test scripts
 │   │   ├── test-api-flow.mjs
 │   │   └── test-parse-csv.mjs
-│   ├── .env.production           # Configuration production
-│   └── firebase.json             # Configuration Firebase Hosting
+│   ├── .env.production           # Production configuration
+│   └── firebase.json             # Firebase Hosting configuration
 │
-├── results/                      # Résultats générés (local)
+├── results/                      # Generated results (local)
 │   ├── classification/
-│   │   └── flat_model.pkl        # Modèle entraîné
+│   │   └── flat_model.pkl        # Trained model
 │   └── audit/
-│       └── category_names.json   # Noms de catégories
+│       └── category_names.json   # Category names
 │
-├── scripts/                      # Scripts de déploiement
-│   ├── start_local.sh            # Démarrage local (API + Frontend)
-│   ├── start_prod.sh             # Test production local
-│   ├── deploy_cloud_run.sh       # Déploiement API Cloud Run
-│   └── deploy_all.sh             # Déploiement complet (API + Frontend)
+├── scripts/                      # Deployment and management scripts
+│   └── update_latest_version.sh  # Manual LATEST_VERSION.txt update
 │
-├── Dockerfile                    # Image Docker pour Cloud Run
-├── requirements.txt              # Dépendances Python
-└── README.md                     # Ce fichier
+├── start_local.sh                # Local startup (API + Frontend)
+├── start_prod.sh                 # Local production test
+├── deploy_cloud_run.sh           # Cloud Run API deployment
+├── deploy_all.sh                 # Complete deployment (API + Frontend)
+├── Dockerfile                    # Docker image for Cloud Run
+├── requirements.txt              # Python dependencies
+└── README.md                     # This file
 ```
 
-## Technologies utilisées
+## Technologies Used
 
 ### Backend
 
-- **Python 3.11** : Langage principal
-- **FastAPI** : Framework web pour l'API REST
-- **scikit-learn** : Classification (Logistic Regression)
-- **sentence-transformers** : Embeddings multilingues (`paraphrase-multilingual-MiniLM-L12-v2`)
-- **pandas** : Manipulation de données
-- **numpy** : Calculs numériques
-- **prometheus-client** : Métriques Prometheus
-- **google-cloud-storage** : Intégration GCS
-- **google-cloud-bigquery** : Tracking BigQuery
+- **Python 3.11**: Main language
+- **FastAPI**: Web framework for REST API
+- **scikit-learn**: Classification (Logistic Regression)
+- **sentence-transformers**: Multilingual embeddings (`paraphrase-multilingual-MiniLM-L12-v2`)
+- **pandas**: Data manipulation
+- **numpy**: Numerical computations
+- **prometheus-client**: Prometheus metrics
+- **google-cloud-storage**: GCS integration
+- **google-cloud-bigquery**: BigQuery tracking
 
 ### Frontend
 
-- **Next.js 14** : Framework React avec App Router
-- **TypeScript** : Typage statique
-- **Tailwind CSS** : Styling
-- **Recharts** : Visualisation de données
-- **Firebase Hosting** : Déploiement frontend
+- **Next.js 14**: React framework with App Router
+- **TypeScript**: Static typing
+- **Tailwind CSS**: Styling
+- **Recharts**: Data visualization
+- **Firebase Hosting**: Frontend deployment
 
 ### Infrastructure
 
-- **Google Cloud Run** : Hébergement API (serverless)
-- **Google Cloud Storage** : Stockage modèles et datasets
-- **Google BigQuery** : Tracking et métriques
-- **Firebase Hosting** : Hébergement frontend statique
-- **Docker** : Containerisation pour Cloud Run
+- **Google Cloud Run**: API hosting (serverless)
+- **Google Cloud Storage**: Model and dataset storage
+- **Google BigQuery**: Tracking and metrics
+- **Firebase Hosting**: Static frontend hosting
+- **Docker**: Containerization for Cloud Run
 
 ## Installation
 
-### Prérequis
+### Prerequisites
 
 - Python 3.11+
 - Node.js 18+
 - Google Cloud SDK (`gcloud`)
 - Firebase CLI (`firebase-tools`)
-- Compte Google Cloud Platform configuré
+- Configured Google Cloud Platform account
 
-### Installation des dépendances
+### Dependency Installation
 
-**Backend :**
+**Backend:**
 
 ```bash
-# Créer et activer l'environnement virtuel
+# Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# Installer PyTorch CPU-only (recommandé pour éviter les problèmes CUDA)
+# Install PyTorch CPU-only (recommended to avoid CUDA issues)
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# Installer les autres dépendances
+# Install other dependencies
 pip install -r requirements.txt
 ```
 
-**Frontend :**
+**Frontend:**
 
 ```bash
 cd frontend-nextjs
 npm install
 ```
 
-### Configuration Google Cloud
+### Google Cloud Configuration
 
 ```bash
-# Authentification
+# Authentication
 gcloud auth login
 
-# Définir le projet par défaut
+# Set default project
 gcloud config set project master-ai-cloud
 
-# Activer les APIs nécessaires
+# Enable required APIs
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable bigquery.googleapis.com
 ```
 
-### Configuration Firebase
+### Firebase Configuration
 
 ```bash
 cd frontend-nextjs
@@ -269,101 +274,109 @@ firebase login
 firebase init hosting
 ```
 
-## Utilisation
+## Usage
 
-### Développement local
+### Local Development
 
-**Option 1 : Script automatique (recommandé)**
+**Option 1: Automatic script (recommended)**
 
 ```bash
 ./start_local.sh
 ```
 
-Ce script lance :
-- L'API sur `http://localhost:8000` (mode développement avec reload)
-- Le frontend sur `http://localhost:3000` (mode développement Next.js)
-- Charge le modèle depuis le système de fichiers local
+This script launches:
+- API on `http://localhost:8000` (development mode with reload)
+- Frontend on `http://localhost:3000` (Next.js development mode)
+- Loads model from local filesystem
 
-**Option 2 : Lancement manuel**
+**Option 2: Manual launch**
 
 ```bash
-# Terminal 1 : API
+# Terminal 1: API
 source venv/bin/activate
 uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 2 : Frontend
+# Terminal 2: Frontend
 cd frontend-nextjs
 npm run dev
 ```
 
-### Test production local
+### Local Production Test
 
-Pour tester le comportement en production (modèle depuis GCS) :
+To test production behavior (model from GCS):
 
 ```bash
 ./start_prod.sh
 ```
 
-Ce script :
-- Lance l'API sur `http://localhost:8000` (sans reload, mode production)
-- Build le frontend avec `.env.production`
-- Sert les fichiers statiques sur `http://localhost:3001`
-- Charge le modèle depuis GCS (`MODEL_SOURCE=gcs`)
+This script:
+- Launches API on `http://localhost:8000` (without reload, production mode)
+- Builds frontend with `.env.production`
+- Serves static files on `http://localhost:3001`
+- Loads model from GCS (`MODEL_SOURCE=gcs`)
 
-### Entraînement du modèle
+### Model Training
 
-**Entraînement local :**
-
-```bash
-python3 src/train.py --version v1.0.0 --local-only
-```
-
-**Entraînement avec upload GCS/BigQuery :**
+**Local training:**
 
 ```bash
-python3 src/train.py --version v1.0.0
+python3 src/train.py --version v1.0.6 --local-only
 ```
 
-Le script :
-- Entraîne le modèle sur le dataset d'entraînement
-- Évalue sur le dataset de test
-- Sauvegarde le modèle localement dans `results/classification/`
-- Upload vers GCS dans `gs://bucket/models/{version}/model.pkl`
-- Enregistre les métriques dans BigQuery
+**Training with GCS/BigQuery upload:**
 
-### Audit de la taxonomie
+```bash
+python3 src/train.py --version v1.0.6
+```
+
+The script:
+- Trains model on training dataset
+- Evaluates on test dataset
+- Saves model locally in `results/classification/`
+- Uploads to GCS in `gs://bucket/models/{version}/model.pkl`
+- Automatically updates `LATEST_VERSION.txt` in GCS with the new version
+- Records metrics in BigQuery
+
+### Taxonomy Audit
 
 ```bash
 python3 src/audit_taxonomy.py
 ```
 
-Génère :
-- Analyse de la structure hiérarchique
-- Détection des incohérences
-- Évaluation de la cohérence sémantique
-- Génération des noms de catégories (`results/audit/category_names.json`)
+Generates:
+- Hierarchical structure analysis
+- Inconsistency detection
+- Semantic coherence evaluation
+- Category name generation (`results/audit/category_names.json`)
 
-### Déploiement
+### Deployment
 
-**Déploiement complet (API + Frontend) :**
+**Complete deployment (API + Frontend):**
 
 ```bash
 ./deploy_all.sh
 ```
 
-Ce script :
-1. Déploie l'API sur Cloud Run
-2. Récupère l'URL de l'API déployée
-3. Met à jour `frontend-nextjs/.env.production` avec l'URL API
-4. Build et déploie le frontend sur Firebase Hosting
+This script:
+1. Verifies Google Cloud and Firebase authentications
+2. Deploys API on Cloud Run with `MODEL_VERSION=latest` (automatically resolves to latest version)
+3. Retrieves deployed API URL
+4. Updates `frontend-nextjs/.env.production` with API URL
+5. Builds and deploys frontend on Firebase Hosting
 
-**Déploiement API uniquement :**
+**With specific version:**
+
+```bash
+MODEL_VERSION=v1.0.5 ./deploy_all.sh
+```
+
+**API deployment only:**
 
 ```bash
 ./deploy_cloud_run.sh
 ```
 
-**Déploiement frontend uniquement :**
+**Frontend deployment only:**
 
 ```bash
 cd frontend-nextjs
@@ -372,74 +385,121 @@ npm run deploy:firebase
 
 ## Configuration
 
-### Variables d'environnement
+### Environment Variables
 
-**API (Backend) :**
+**API (Backend):**
 
-- `MODEL_SOURCE` : Source du modèle (`local` ou `gcs`, défaut: `local`)
-- `MODEL_VERSION` : Version du modèle à charger depuis GCS (défaut: `v1.0.0`)
-- `GOOGLE_CLOUD_PROJECT` : ID du projet GCP (défaut: `master-ai-cloud`)
-- `GCS_BUCKET` : Nom du bucket GCS (défaut: `master-ai-cloud-ecommerce-ml`)
+- `MODEL_SOURCE`: Model source (`local` or `gcs`, default: `local`)
+- `MODEL_VERSION`: Model version to load from GCS (default: `latest`)
+  - `latest`: Automatically resolves to the latest available version in GCS
+  - `v1.0.5`, `v1.0.6`, etc.: Specific version
+- `GOOGLE_CLOUD_PROJECT`: GCP project ID (default: `master-ai-cloud`)
+- `GCS_BUCKET`: GCS bucket name (default: `master-ai-cloud-ecommerce-ml`)
 
-**Frontend :**
+**Frontend:**
 
-- `NEXT_PUBLIC_API_URL` : URL de l'API (défini dans `.env.production` pour le build)
+- `NEXT_PUBLIC_API_URL`: API URL (defined in `.env.production` for build)
 
-### Fichiers de configuration
+### Configuration Files
 
-- `src/utils/config.py` : Configuration GCP (PROJECT_ID, REGION, BUCKET, etc.)
-- `frontend-nextjs/.env.production` : Configuration production frontend
-- `Dockerfile` : Configuration de l'image Docker pour Cloud Run
-- `firebase.json` : Configuration Firebase Hosting
+- `src/utils/config.py`: GCP configuration (PROJECT_ID, REGION, BUCKET, etc.)
+- `frontend-nextjs/.env.production`: Frontend production configuration
+- `Dockerfile`: Docker image configuration for Cloud Run
+- `firebase.json`: Firebase Hosting configuration
 
-## Performance et métriques
+## Model Version Management
 
-### Métriques du modèle
+### Automatic Versioning System
 
-- **Accuracy globale** : 77.47% sur le test set
-- **Distribution de confiance** : 75.5% des produits avec confiance >= 0.5
-- **Produits incertains** : 24.5% nécessitent validation humaine
+The project uses Semantic Versioning (`v1.0.0`, `v1.0.1`, `v1.1.0`, etc.) with automatic support for the "latest" version.
 
-### Métriques API (Prometheus)
+**How it works:**
 
-Les métriques sont exposées sur `/metrics` :
+1. **During training**:
+   ```bash
+   python3 src/train.py --version v1.0.6
+   ```
+   - Uploads model to `gs://bucket/models/v1.0.6/model.pkl`
+   - Automatically updates `gs://bucket/models/LATEST_VERSION.txt` with `v1.0.6`
 
-- `api_request_duration_seconds` : Latence des requêtes
-- `api_requests_total` : Nombre total de requêtes
-- `api_errors_total` : Nombre d'erreurs
-- `api_confidence_score_average` : Score de confiance moyen
-- `api_inference_duration_seconds` : Temps d'inférence du modèle
+2. **During deployment with `latest`**:
+   ```bash
+   ./deploy_all.sh  # Uses MODEL_VERSION=latest by default
+   ```
+   - API first reads `LATEST_VERSION.txt` to know the latest version
+   - If file doesn't exist, lists all versions in GCS and finds the most recent numerically
+   - Automatically loads this version
 
-### Visualisation
+3. **Manual update of LATEST_VERSION.txt**:
+   ```bash
+   ./scripts/update_latest_version.sh v1.0.5
+   ```
+   Useful for rollback to an older version or initialization.
 
-Les métriques peuvent être :
-- Scrapées par Prometheus
-- Visualisées dans Grafana
-- Intégrées dans Google Cloud Monitoring
+**Usage examples:**
 
-## Documentation complémentaire
+```bash
+# Deploy with latest version (automatic)
+./deploy_all.sh
 
-- **API_README.md** : Documentation détaillée de l'API
-- **SYNTHESIS.md** : Synthèse méthodologique et résultats détaillés
-- **ARCHITECTURE.md** : Architecture détaillée du système
-- **CLOUD_MONITORING.md** : Guide de monitoring Cloud
+# Deploy with specific version
+MODEL_VERSION=v1.0.5 ./deploy_all.sh
 
-## Améliorations futures
+# Test a version locally (production)
+MODEL_VERSION=v1.0.3 ./start_prod.sh
 
-### Techniques
+# Train a new version (automatically updates LATEST_VERSION.txt)
+python3 src/train.py --version v1.0.7
+```
 
-- Migration vers des modèles plus sophistiqués (BERT fine-tuné, Transformers)
-- Exploitation de la hiérarchie (approche top-down ou hybride)
-- Intégration efficace de la marque et de la couleur
-- Seuil de confiance adaptatif par catégorie
+## Performance and Metrics
 
-### Opérationnelles
+### Model Metrics
 
-- Détection automatique de nouvelles catégories
-- Monitoring en temps réel des performances
-- Workflow d'intégration des corrections humaines
-- Active learning pour prioriser les produits à valider
+- **Overall accuracy**: 77.47% on test set
+- **Confidence distribution**: 75.5% of products with confidence >= 0.5
+- **Uncertain products**: 24.5% require human validation
 
-## Licence
+### API Metrics (Prometheus)
 
-Ce projet est un projet de démonstration et d'apprentissage.
+Metrics are exposed on `/metrics`:
+
+- `api_request_duration_seconds`: Request latency
+- `api_requests_total`: Total number of requests
+- `api_errors_total`: Number of errors
+- `api_confidence_score_average`: Average confidence score
+- `api_inference_duration_seconds`: Model inference time
+
+### Visualization
+
+Metrics can be:
+- Scraped by Prometheus
+- Visualized in Grafana
+- Integrated into Google Cloud Monitoring
+
+## Additional Documentation
+
+- **API_README.md**: Detailed API documentation
+- **SYNTHESIS.md**: Methodological synthesis and detailed results
+- **ARCHITECTURE.md**: Detailed system architecture
+- **CLOUD_MONITORING.md**: Cloud monitoring guide
+
+## Future Improvements
+
+### Technical
+
+- Migration to more sophisticated models (fine-tuned BERT, Transformers)
+- Hierarchy exploitation (top-down or hybrid approach)
+- Efficient brand and color integration
+- Adaptive confidence threshold per category
+
+### Operational
+
+- Automatic new category detection
+- Real-time performance monitoring
+- Human correction integration workflow
+- Active learning to prioritize products to validate
+
+## License
+
+This project is a demonstration and learning project.
