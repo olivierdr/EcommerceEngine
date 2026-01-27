@@ -30,23 +30,30 @@ if [ ! -f "results/classification/flat_model.pkl" ]; then
 fi
 
 # Check testset exists (needed for Load test dataset on the frontend)
-if [ ! -f "data/testset.csv" ]; then
-    echo "WARNING: data/testset.csv not found. /testset will return 404 on Cloud Run."
-    echo "   Add data/testset.csv if you want to load the test dataset from the deployed frontend."
+if [ ! -f "src/data/testset.csv" ]; then
+    echo "WARNING: src/data/testset.csv not found. /testset will return 404 on Cloud Run."
+    echo "   Add src/data/testset.csv if you want to load the test dataset from the deployed frontend."
 fi
 
 # Check/create Artifact Registry repository
 echo "Checking Artifact Registry repository..."
-if ! gcloud artifacts repositories describe ${REPO_NAME} --location=${REGION} --project=${PROJECT_ID} &>/dev/null; then
+if gcloud artifacts repositories describe ${REPO_NAME} --location=${REGION} --project=${PROJECT_ID} &>/dev/null; then
+    echo "Repository already exists"
+else
     echo "Creating Artifact Registry repository..."
-    gcloud artifacts repositories create ${REPO_NAME} \
+    create_out=$(gcloud artifacts repositories create ${REPO_NAME} \
         --repository-format=docker \
         --location=${REGION} \
         --description="Repository for Cloud Run FastAPI" \
-        --project=${PROJECT_ID}
-    echo "Repository created"
-else
-    echo "Repository already exists"
+        --project=${PROJECT_ID} 2>&1); create_rc=$?
+    if [ ${create_rc} -eq 0 ]; then
+        echo "Repository created"
+    elif echo "${create_out}" | grep -q "ALREADY_EXISTS"; then
+        echo "Repository already exists (continuing)"
+    else
+        echo "${create_out}"
+        exit 1
+    fi
 fi
 
 # Build Docker image
@@ -65,6 +72,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 300 \
     --min-instances 0 \
     --max-instances 10 \
+    --set-env-vars MODEL_SOURCE=gcs,MODEL_VERSION=v1.0.0 \
     --project ${PROJECT_ID}
 
 # Get service URL

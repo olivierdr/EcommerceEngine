@@ -8,6 +8,7 @@ import time
 import pickle
 import logging
 import json
+import tempfile
 from pathlib import Path
 from typing import Optional
 import numpy as np
@@ -20,6 +21,14 @@ from sentence_transformers import SentenceTransformer
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import GCS utilities (optional)
+try:
+    from src.tracking.gcs import download_model
+    from src.utils.config import GCS_BUCKET, PROJECT_ID
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
 # Configure structured logging for Cloud Logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -31,7 +40,10 @@ class ClassificationModel:
     """Wrapper for loading and using the classification model"""
     
     def __init__(self, model_path: Optional[Path] = None):
-        self.model_path = model_path or Path(__file__).parent.parent / 'results' / 'classification' / 'flat_model.pkl'
+        self.model_source = os.getenv('MODEL_SOURCE', 'local').lower()
+        self.model_version = os.getenv('MODEL_VERSION', 'v1.0.0')
+        self.model_path = model_path
+        self.temp_model_file = None
         self.classifier = None
         self.label_encoder = None
         self.embedding_model = None
@@ -40,33 +52,110 @@ class ClassificationModel:
         self.load_model()
     
     def load_model(self):
-        """Load model from pickle file"""
+        """Load model from local file or GCS based on MODEL_SOURCE env var"""
+        if self.model_source == 'gcs':
+            self._load_from_gcs()
+        else:
+            self._load_from_local()
+        
+        # Load category names
+        self._load_category_names()
+        
+        # Load embedding model
+        embedding_model_name = self.model_data.get('embedding_model_name', 'paraphrase-multilingual-MiniLM-L12-v2')
+        print(f"Loading embedding model: {embedding_model_name}...")
+        self.embedding_model = SentenceTransformer(embedding_model_name)
+        
+        print("Model loaded successfully")
+    
+    def _load_from_local(self):
+        """Load model from local file system"""
+        if self.model_path is None:
+            self.model_path = Path(__file__).parent.parent / 'results' / 'classification' / 'flat_model.pkl'
+        
         if not self.model_path.exists():
             raise FileNotFoundError(f"Model not found: {self.model_path}")
         
-        print(f"Loading model from {self.model_path}...")
+        print(f"Loading model from local file: {self.model_path}...")
         with open(self.model_path, 'rb') as f:
-            model_data = pickle.load(f)
+            self.model_data = pickle.load(f)
         
-        self.classifier = model_data['classifier']
-        self.label_encoder = model_data['label_encoder']
-        self.cat_to_path = model_data.get('cat_to_path', {})
+        self.classifier = self.model_data['classifier']
+        self.label_encoder = self.model_data['label_encoder']
+        self.cat_to_path = self.model_data.get('cat_to_path', {})
+    
+    def _load_from_gcs(self):
+        """Load model from Google Cloud Storage"""
+        if not GCS_AVAILABLE:
+            raise RuntimeError(
+                "MODEL_SOURCE=gcs but GCS not available. "
+                "Install google-cloud-storage or set MODEL_SOURCE=local"
+            )
         
-        # Load category names
+        print(f"Loading model from GCS...")
+        print(f"  Bucket: {GCS_BUCKET}")
+        print(f"  Version: {self.model_version}")
+        print(f"  Path: models/{self.model_version}/model.pkl")
+        
+        # Download to temporary file
+        self.temp_model_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pkl')
+        temp_path = Path(self.temp_model_file.name)
+        
+        try:
+            download_model(self.model_version, str(temp_path))
+            print(f"  Downloaded to temporary file: {temp_path}")
+            
+            # Load from temp file
+            with open(temp_path, 'rb') as f:
+                self.model_data = pickle.load(f)
+            
+            self.classifier = self.model_data['classifier']
+            self.label_encoder = self.model_data['label_encoder']
+            self.cat_to_path = self.model_data.get('cat_to_path', {})
+        except Exception as e:
+            temp_path.unlink(missing_ok=True)
+            raise RuntimeError(f"Failed to load model from GCS: {e}")
+    
+    def _load_category_names(self):
+        """Load category names from GCS or local file"""
+        if self.model_source == 'gcs' and GCS_AVAILABLE:
+            # Try to load from GCS first
+            try:
+                from google.cloud import storage
+                client = storage.Client(project=PROJECT_ID)
+                bucket = client.bucket(GCS_BUCKET)
+                blob = bucket.blob(f"models/{self.model_version}/category_names.json")
+                
+                if blob.exists():
+                    with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp:
+                        blob.download_to_filename(tmp.name)
+                        with open(tmp.name, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        Path(tmp.name).unlink()
+                        for cat_id, info in data.items():
+                            self.cat_to_name[cat_id] = info['name'] if isinstance(info, dict) else info
+                        print(f"Loaded {len(self.cat_to_name)} category names from GCS")
+                        return
+            except Exception as e:
+                print(f"Warning: Could not load category names from GCS: {e}")
+                print("  Falling back to local file...")
+        
+        # Fallback to local file
         names_path = Path(__file__).parent.parent / 'results' / 'audit' / 'category_names.json'
         if names_path.exists():
             with open(names_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 for cat_id, info in data.items():
                     self.cat_to_name[cat_id] = info['name'] if isinstance(info, dict) else info
-            print(f"Loaded {len(self.cat_to_name)} category names")
-        
-        # Load embedding model
-        embedding_model_name = model_data.get('embedding_model_name', 'paraphrase-multilingual-MiniLM-L12-v2')
-        print(f"Loading embedding model: {embedding_model_name}...")
-        self.embedding_model = SentenceTransformer(embedding_model_name)
-        
-        print("Model loaded successfully")
+            print(f"Loaded {len(self.cat_to_name)} category names from local file")
+    
+    def __del__(self):
+        """Cleanup temporary file if created"""
+        if self.temp_model_file and Path(self.temp_model_file.name).exists():
+            try:
+                Path(self.temp_model_file.name).unlink()
+            except:
+                pass
     
     def predict_single(self, title: str, description: str = ""):
         """Predict category for a single product"""
@@ -296,8 +385,8 @@ async def get_metrics():
 
 @app.get("/testset")
 async def get_testset():
-    """Serve testset.csv file"""
-    testset_path = Path(__file__).parent.parent / 'data' / 'testset.csv'
+    """Serve testset.csv from src/data/"""
+    testset_path = Path(__file__).parent / 'data' / 'testset.csv'
     if not testset_path.exists():
         raise HTTPException(status_code=404, detail="Testset file not found")
     
