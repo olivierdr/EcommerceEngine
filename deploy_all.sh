@@ -30,6 +30,35 @@ if ! command -v firebase &> /dev/null; then
     exit 1
 fi
 
+# Vérification authentification Google Cloud
+echo "Vérification authentification Google Cloud..."
+if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" &>/dev/null | grep -q .; then
+    echo "❌ ERROR: Aucun compte Google Cloud authentifié"
+    echo "   Exécutez: gcloud auth login"
+    exit 1
+fi
+
+# Vérifier que le projet est configuré
+CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null)
+if [ -z "${CURRENT_PROJECT}" ]; then
+    echo "❌ ERROR: Aucun projet GCP configuré"
+    echo "   Exécutez: gcloud config set project ${PROJECT_ID}"
+    exit 1
+fi
+
+echo "✓ Google Cloud authentifié (projet: ${CURRENT_PROJECT})"
+
+# Vérification authentification Firebase
+echo "Vérification authentification Firebase..."
+if ! firebase projects:list &>/dev/null; then
+    echo "❌ ERROR: Authentification Firebase échouée ou expirée"
+    echo "   Exécutez: firebase login --reauth"
+    exit 1
+fi
+
+echo "✓ Firebase authentifié"
+echo ""
+
 # ==================== ÉTAPE 1: Déploiement API ====================
 echo "📦 ÉTAPE 1/2: Déploiement API sur Cloud Run..."
 echo ""
