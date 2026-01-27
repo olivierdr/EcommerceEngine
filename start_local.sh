@@ -29,8 +29,12 @@ fi
 echo "🚀 Démarrage API (port 8000) + front (port 3000)..."
 echo "   API:       http://localhost:8000"
 echo "   Front:     http://localhost:3000"
+echo "   Model:     Local (results/classification/flat_model.pkl)"
 echo "   Ctrl+C pour tout arrêter."
 echo ""
+
+# Modèle local par défaut (pas de MODEL_SOURCE ou MODEL_SOURCE=local)
+export MODEL_SOURCE=local
 
 uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload &
 UVICORN_PID=$!
