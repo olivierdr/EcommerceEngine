@@ -20,11 +20,10 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # Copy source code
 COPY src/ ./src/
 
-# Create directories and copy model, category names, and testset
-RUN mkdir -p ./results/classification ./results/audit ./data
+# Create directories and copy model + category names (testset is in src/data/ via COPY src/)
+RUN mkdir -p ./results/classification ./results/audit
 COPY results/classification/flat_model.pkl ./results/classification/flat_model.pkl
 COPY results/audit/category_names.json ./results/audit/category_names.json
-COPY data/testset.csv ./data/testset.csv
 
 # Exposer le port (Cloud Run utilise PORT env var)
 ENV PORT=8080
