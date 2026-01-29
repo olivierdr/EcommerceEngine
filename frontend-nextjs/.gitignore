@@ -27,6 +27,10 @@ yarn-error.log*
 # local env files
 .env*.local
 .env.production
+.env.production.backup
+
+# firebase
+.firebase/
 
 # vercel
 .vercel
@@ -35,4 +39,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+.firebase/
 

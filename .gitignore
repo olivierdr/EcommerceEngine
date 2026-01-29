@@ -18,8 +18,11 @@ env/
 
 # Env (ne pas pousser sur GitHub)
 .env.production
+.env.production.backup
 .env*.local
 
+#Ignore Firebase files
+.frontend-nextjs/firebase/
 # Cache et modèles ML
 .cache/
 *.pkl
