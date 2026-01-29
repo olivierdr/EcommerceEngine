@@ -120,6 +120,14 @@ def main(version="v1.0.0", dataset_version="v1.0", local_only=False):
             model_gcs_path = upload_model(model_path, version)
             print(f"✓ Model uploaded: {model_gcs_path}")
             
+            # Update LATEST_VERSION.txt
+            from src.tracking.gcs import update_latest_version
+            try:
+                latest_path = update_latest_version(version)
+                print(f"✓ Updated LATEST_VERSION.txt: {latest_path}")
+            except Exception as e:
+                print(f"Warning: Could not update LATEST_VERSION.txt: {e}")
+            
             # Upload metadata
             metadata = {
                 "version": version,

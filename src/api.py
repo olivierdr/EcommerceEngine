@@ -41,7 +41,20 @@ class ClassificationModel:
     
     def __init__(self, model_path: Optional[Path] = None):
         self.model_source = os.getenv('MODEL_SOURCE', 'local').lower()
-        self.model_version = os.getenv('MODEL_VERSION', 'v1.0.0')
+        requested_version = os.getenv('MODEL_VERSION', 'v1.0.5')
+        
+        # If MODEL_VERSION=latest, resolve to actual version
+        if requested_version.lower() == 'latest' and self.model_source == 'gcs' and GCS_AVAILABLE:
+            try:
+                from src.tracking.gcs import get_latest_version
+                self.model_version = get_latest_version()
+                print(f"Resolved MODEL_VERSION=latest to {self.model_version}")
+            except Exception as e:
+                print(f"Warning: Could not resolve 'latest' version: {e}")
+                print("Falling back to default version v1.0.5")
+                self.model_version = 'v1.0.5'
+        else:
+            self.model_version = requested_version
         self.model_path = model_path
         self.temp_model_file = None
         self.classifier = None

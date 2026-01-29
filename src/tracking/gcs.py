@@ -59,3 +59,69 @@ def download_model(version, local_path, bucket_name=None):
     blob.download_to_filename(str(local_path))
     return local_path
 
+
+def get_latest_version(bucket_name=None):
+    """Get the latest model version from GCS.
+    First tries to read LATEST_VERSION.txt, then falls back to listing and comparing versions.
+    """
+    if bucket_name is None:
+        bucket_name = GCS_BUCKET
+    
+    client = storage.Client(project=PROJECT_ID)
+    bucket = client.bucket(bucket_name)
+    
+    # Try to read LATEST_VERSION.txt first (faster)
+    latest_blob = bucket.blob("models/LATEST_VERSION.txt")
+    if latest_blob.exists():
+        try:
+            latest_version = latest_blob.download_as_text().strip()
+            if latest_version:
+                return latest_version
+        except Exception as e:
+            print(f"Warning: Could not read LATEST_VERSION.txt: {e}")
+            print("Falling back to listing versions...")
+    
+    # Fallback: list all versions and find the latest
+    import re
+    versions = set()
+    
+    # List blobs with prefix "models/v" and extract unique version strings
+    for blob in bucket.list_blobs(prefix="models/v", delimiter="/"):
+        # Extract version from path like "models/v1.0.5/model.pkl" or "models/v1.0.5/"
+        match = re.match(r"models/(v\d+\.\d+\.\d+)", blob.name)
+        if match:
+            version_str = match.group(1)
+            versions.add(version_str)
+    
+    # Also check prefixes (folders) directly
+    for prefix in bucket.list_blobs(prefix="models/v", delimiter="/"):
+        # For delimiter listing, check if it's a folder
+        if prefix.name.endswith("/"):
+            match = re.match(r"models/(v\d+\.\d+\.\d+)/", prefix.name)
+            if match:
+                versions.add(match.group(1))
+    
+    if not versions:
+        raise ValueError("No model versions found in GCS")
+    
+    # Sort versions numerically (v1.0.5 > v1.0.1)
+    def version_key(v):
+        parts = v[1:].split('.')  # Remove 'v' and split
+        return tuple(int(p) for p in parts)
+    
+    latest = max(versions, key=version_key)
+    print(f"Found {len(versions)} version(s) in GCS, latest is {latest}")
+    return latest
+
+
+def update_latest_version(version, bucket_name=None):
+    """Update LATEST_VERSION.txt in GCS with the given version"""
+    if bucket_name is None:
+        bucket_name = GCS_BUCKET
+    
+    client = storage.Client(project=PROJECT_ID)
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob("models/LATEST_VERSION.txt")
+    blob.upload_from_string(version)
+    return f"gs://{bucket_name}/models/LATEST_VERSION.txt"
+

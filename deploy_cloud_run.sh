@@ -9,6 +9,7 @@ SERVICE_NAME="ecommerce-classification-api"
 REGION="europe-west1"
 REPO_NAME="cloud-run-repo2"
 IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}"
+MODEL_VERSION=${MODEL_VERSION:-latest}
 
 echo "Deploying to Cloud Run..."
 echo "   Project: ${PROJECT_ID}"
@@ -72,7 +73,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 300 \
     --min-instances 0 \
     --max-instances 10 \
-    --set-env-vars MODEL_SOURCE=gcs,MODEL_VERSION=v1.0.0 \
+    --set-env-vars MODEL_SOURCE=gcs,MODEL_VERSION=${MODEL_VERSION} \
     --project ${PROJECT_ID}
 
 # Get service URL

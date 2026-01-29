@@ -13,6 +13,7 @@ SERVICE_NAME="ecommerce-classification-api"
 REGION="europe-west1"
 REPO_NAME="cloud-run-repo2"
 IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}"
+MODEL_VERSION=${MODEL_VERSION:-latest}
 
 echo "🚀 Déploiement complet (API + Frontend)"
 echo "========================================"
@@ -32,17 +33,19 @@ fi
 
 # Vérification authentification Google Cloud
 echo "Vérification authentification Google Cloud..."
-if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" &>/dev/null | grep -q .; then
-    echo "❌ ERROR: Aucun compte Google Cloud authentifié"
+# Vérifier que le projet est configuré (nécessite authentification)
+CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null)
+if [ -z "${CURRENT_PROJECT}" ]; then
+    echo "❌ ERROR: Aucun projet GCP configuré ou non authentifié"
     echo "   Exécutez: gcloud auth login"
+    echo "   Puis: gcloud config set project ${PROJECT_ID}"
     exit 1
 fi
 
-# Vérifier que le projet est configuré
-CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null)
-if [ -z "${CURRENT_PROJECT}" ]; then
-    echo "❌ ERROR: Aucun projet GCP configuré"
-    echo "   Exécutez: gcloud config set project ${PROJECT_ID}"
+# Vérifier qu'on peut accéder au projet (test d'authentification réel)
+if ! gcloud projects describe "${CURRENT_PROJECT}" &>/dev/null; then
+    echo "❌ ERROR: Impossible d'accéder au projet ${CURRENT_PROJECT}"
+    echo "   Vérifiez votre authentification: gcloud auth login"
     exit 1
 fi
 
@@ -117,7 +120,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 300 \
     --min-instances 0 \
     --max-instances 10 \
-    --set-env-vars MODEL_SOURCE=gcs,MODEL_VERSION=v1.0.0 \
+    --set-env-vars MODEL_SOURCE=gcs,MODEL_VERSION=${MODEL_VERSION} \
     --project ${PROJECT_ID}
 
 # Get service URL

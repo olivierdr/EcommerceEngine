@@ -138,10 +138,26 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          let errorBody = '';
+          try {
+            errorBody = await response.text();
+          } catch {
+            errorBody = `Status ${response.status}`;
+          }
+          throw new Error(`HTTP ${response.status}: ${errorBody.slice(0, 200)}`);
         }
 
         const data = await response.json();
+        
+        // Vérifier que la réponse a le format attendu
+        if (!data || typeof data !== 'object') {
+          throw new Error(`Invalid response format: ${JSON.stringify(data).slice(0, 100)}`);
+        }
+        
+        if (!data.category_id && !data.category_name) {
+          throw new Error(`Missing category fields in response: ${JSON.stringify(data).slice(0, 200)}`);
+        }
+
         const latency = performance.now() - startTime;
         totalLatency += latency;
 
@@ -150,19 +166,22 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
 
         results.push({
           ...product,
-          predicted_category_id: data.category_id,
-          predicted_category_name: data.category_name,
-          predicted_category_path: data.category_path,
-          confidence: data.confidence,
+          predicted_category_id: data.category_id || 'N/A',
+          predicted_category_name: data.category_name || 'Unknown',
+          predicted_category_path: data.category_path || 'N/A',
+          confidence: typeof data.confidence === 'number' ? data.confidence : 0,
           is_correct: isCorrect,
           latency_ms: Math.round(latency),
         });
       } catch (error) {
         console.error('Error classifying product:', error);
+        console.error('Product:', product.title);
+        console.error('API URL:', baseUrl);
+        const errorMsg = error instanceof Error ? error.message : String(error);
         results.push({
           ...product,
           predicted_category_id: 'ERROR',
-          predicted_category_name: 'Error',
+          predicted_category_name: `Error: ${errorMsg.slice(0, 50)}`,
           predicted_category_path: 'N/A',
           confidence: 0,
           is_correct: false,
@@ -215,15 +234,25 @@ export const ProductTester = ({ apiUrl, onResults, onStats }: ProductTesterProps
       }
 
       const data = await response.json();
+      
+      // Vérifier que la réponse a le format attendu
+      if (!data || typeof data !== 'object') {
+        throw new Error(`Invalid response format: ${JSON.stringify(data).slice(0, 100)}`);
+      }
+      
+      if (!data.category_id && !data.category_name) {
+        throw new Error(`Missing category fields in response: ${JSON.stringify(data).slice(0, 200)}`);
+      }
+      
       const latency = performance.now() - startTime;
 
       const result: PredictionResult = {
         title: manualTitle,
         description: manualDescription,
-        predicted_category_id: data.category_id,
-        predicted_category_name: data.category_name,
-        predicted_category_path: data.category_path,
-        confidence: data.confidence,
+        predicted_category_id: data.category_id || 'N/A',
+        predicted_category_name: data.category_name || 'Unknown',
+        predicted_category_path: data.category_path || 'N/A',
+        confidence: typeof data.confidence === 'number' ? data.confidence : 0,
         latency_ms: Math.round(latency),
       };
 

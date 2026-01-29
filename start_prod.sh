@@ -47,7 +47,7 @@ echo ""
 
 # Modèle depuis GCS en production
 export MODEL_SOURCE=gcs
-export MODEL_VERSION=${MODEL_VERSION:-v1.0.0}
+export MODEL_VERSION=${MODEL_VERSION:-latest}
 
 # Lancer API en mode production (sans reload)
 uvicorn src.api:app --host 0.0.0.0 --port 8000 &
